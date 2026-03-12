@@ -27,7 +27,7 @@ def extract_json(text: str):
         end = text.rfind(end_char)
         if end > start:
             try:
-                return json.loads(text[start:end + 1])
+                return json.loads(text[start : end + 1])
             except json.JSONDecodeError:
                 continue
     raise ValueError(f"Could not extract JSON from text: {text[:200]}")
@@ -44,14 +44,17 @@ def render_prompt(template: str, **kwargs) -> str:
         render_prompt("{% for item in items %}- {{ item }}\n{% endfor %}", items=["a", "b"])
         render_prompt("Score: {{ score | round(2) }}", score=0.856)
     """
-    from jinja2 import Environment, BaseLoader, Undefined
+    from jinja2 import BaseLoader, Environment, Undefined
 
     class _SilentUndefined(Undefined):
         """Render undefined variables as empty string instead of raising."""
+
         def __str__(self):
             return ""
+
         def __iter__(self):
             return iter([])
+
         def __bool__(self):
             return False
 

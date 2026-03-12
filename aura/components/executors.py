@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
-from datetime import datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
-from aura.interfaces import Experimenter
-from aura.types import Hypothesis, Experiment, ExperimentStep
-from aura.workspace import Workspace
 from aura.components.llm import LLMCallable
+from aura.interfaces import Experimenter
+from aura.types import Experiment, ExperimentStep, Hypothesis
+from aura.workspace import Workspace
 
 
 class ScriptExperimenter(Experimenter):
@@ -28,26 +28,37 @@ class ScriptExperimenter(Experimenter):
         self.parse_json = parse_json
 
     def run_experiment(self, task: Hypothesis, workspace: Workspace) -> Experiment:
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
 
         # Build command from template + task spec
         cmd = self.command_template.format(**task.spec)
 
         # Constraints override constructor timeout
-        timeout = workspace.constraints().get("time_budget", self.timeout) if workspace else self.timeout
+        timeout = (
+            workspace.constraints().get("time_budget", self.timeout) if workspace else self.timeout
+        )
 
         steps = [ExperimentStep(step=0, data={"type": "command", "cmd": cmd}, timestamp=ts)]
 
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
 
-        steps.append(ExperimentStep(
-            step=1,
-            data={"type": "result", "stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode},
-            timestamp=datetime.now(timezone.utc).isoformat(),
-        ))
+        steps.append(
+            ExperimentStep(
+                step=1,
+                data={
+                    "type": "result",
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                    "returncode": result.returncode,
+                },
+                timestamp=datetime.now(UTC).isoformat(),
+            )
+        )
 
         if result.returncode != 0:
-            return Experiment(task_id=task.id, status="failed", steps=steps, output=None, error=result.stderr)
+            return Experiment(
+                task_id=task.id, status="failed", steps=steps, output=None, error=result.stderr
+            )
 
         output: Any = result.stdout.strip()
         if self.parse_json:
@@ -56,7 +67,13 @@ class ScriptExperimenter(Experimenter):
             except json.JSONDecodeError:
                 pass
 
-        return Experiment(task_id=task.id, status="completed", steps=steps, output=output, metadata={"spec": task.spec})
+        return Experiment(
+            task_id=task.id,
+            status="completed",
+            steps=steps,
+            output=output,
+            metadata={"spec": task.spec},
+        )
 
 
 class FunctionExperimenter(Experimenter):
@@ -74,9 +91,10 @@ class FunctionExperimenter(Experimenter):
         self.timeout = timeout
 
     def run_experiment(self, task: Hypothesis, workspace: Workspace) -> Experiment:
-        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+        from concurrent.futures import ThreadPoolExecutor
+        from concurrent.futures import TimeoutError as FuturesTimeout
 
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
         steps = [ExperimentStep(step=0, data={"type": "call", "spec": task.spec}, timestamp=ts)]
 
         timeout = self.timeout
@@ -90,19 +108,33 @@ class FunctionExperimenter(Experimenter):
                     result = future.result(timeout=timeout)
                 except FuturesTimeout:
                     return Experiment(
-                        task_id=task.id, status="failed", steps=steps,
-                        output=None, error=f"Timed out after {timeout}s",
+                        task_id=task.id,
+                        status="failed",
+                        steps=steps,
+                        output=None,
+                        error=f"Timed out after {timeout}s",
                     )
         else:
             result = self.fn(**task.spec)
 
-        steps.append(ExperimentStep(
-            step=1,
-            data={"type": "result", "output": result if isinstance(result, (dict, list, str, int, float, bool)) else str(result)},
-            timestamp=datetime.now(timezone.utc).isoformat(),
-        ))
+        steps.append(
+            ExperimentStep(
+                step=1,
+                data={
+                    "type": "result",
+                    "output": result
+                    if isinstance(result, (dict, list, str, int, float, bool))
+                    else str(result),
+                },
+                timestamp=datetime.now(UTC).isoformat(),
+            )
+        )
 
-        output = result if isinstance(result, (dict, list, str, int, float, bool, type(None))) else str(result)
+        output = (
+            result
+            if isinstance(result, (dict, list, str, int, float, bool, type(None)))
+            else str(result)
+        )
         return Experiment(task_id=task.id, status="completed", steps=steps, output=output)
 
 
@@ -119,7 +151,7 @@ class LLMExperimenter(Experimenter):
     def run_experiment(self, task: Hypothesis, workspace: Workspace) -> Experiment:
         from aura.utils.parsing import render_prompt
 
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
 
         constraints = workspace.constraints() if workspace else {}
         prompt = render_prompt(self.prompt_template, **task.spec, constraints=constraints)
@@ -127,10 +159,14 @@ class LLMExperimenter(Experimenter):
 
         response = self.llm(prompt)
 
-        steps.append(ExperimentStep(
-            step=1,
-            data={"type": "response", "content": response},
-            timestamp=datetime.now(timezone.utc).isoformat(),
-        ))
+        steps.append(
+            ExperimentStep(
+                step=1,
+                data={"type": "response", "content": response},
+                timestamp=datetime.now(UTC).isoformat(),
+            )
+        )
 
-        return Experiment(task_id=task.id, status="completed", steps=steps, output={"response": response})
+        return Experiment(
+            task_id=task.id, status="completed", steps=steps, output={"response": response}
+        )

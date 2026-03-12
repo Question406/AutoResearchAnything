@@ -1,5 +1,6 @@
 from pathlib import Path
-from aura.types import Hypothesis, ExperimentStep, Experiment, Evaluation, Insight
+
+from aura.types import Evaluation, Experiment, ExperimentStep, Hypothesis, Insight
 from aura.workspace import Workspace
 
 
@@ -40,8 +41,11 @@ def test_save_and_load_trajectory(tmp_workspace: Workspace):
     step0 = ExperimentStep(step=0, data={"action": "think"}, timestamp="2026-03-11T00:00:00Z")
     step1 = ExperimentStep(step=1, data={"action": "act"}, timestamp="2026-03-11T00:00:01Z")
     traj = Experiment(
-        task_id="task_001", status="completed", steps=[step0, step1],
-        output={"result": 42}, metadata={"duration_ms": 100},
+        task_id="task_001",
+        status="completed",
+        steps=[step0, step1],
+        output={"result": 42},
+        metadata={"duration_ms": 100},
     )
     tmp_workspace.save_trajectory(traj, iteration=1)
 

@@ -2,11 +2,37 @@
 name = "aura"
 version = "0.1.0"
 description = "Domain-agnostic iterative pipeline framework for auto research"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "AURA Contributors" }]
 requires-python = ">=3.11"
+keywords = ["research", "llm", "pipeline", "automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
     "jinja2>=3.1.6",
     "pydantic>=2.12.5",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Question406/AutoResearchAnything"
+Repository = "https://github.com/Question406/AutoResearchAnything"
+"Bug Tracker" = "https://github.com/Question406/AutoResearchAnything/issues"
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.45.0"]
+openai = ["openai>=1.60.0"]
+all = ["anthropic>=0.45.0", "openai>=1.60.0"]
 
 [project.scripts]
 aura = "aura.cli:main"
@@ -14,9 +40,6 @@ aura = "aura.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["aura"]
@@ -26,4 +49,34 @@ dev = [
     "anthropic>=0.45.0",
     "openai>=1.60.0",
     "pytest>=9.0.2",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.9.0",
+    "pyright>=1.1.390",
 ]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F811"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+include = ["aura"]
+exclude = ["tests", "examples", ".venv"]
+
+[tool.coverage.run]
+source = ["aura"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "@abstractmethod"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--tb=short"

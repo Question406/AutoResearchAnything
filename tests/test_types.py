@@ -1,4 +1,4 @@
-from aura.types import Hypothesis, ExperimentStep, Experiment, Evaluation, Insight
+from aura.types import Evaluation, Experiment, ExperimentStep, Hypothesis, Insight
 
 
 def test_hypothesis_construction():
@@ -72,27 +72,36 @@ def test_experiment_roundtrip():
         ExperimentStep(step=1, data={"action": "act"}, timestamp="2026-03-11T00:00:01Z"),
     ]
     original = Experiment(
-        task_id="t1", status="completed", steps=steps,
-        output={"answer": 42}, error=None, metadata={"duration_ms": 200},
+        task_id="t1",
+        status="completed",
+        steps=steps,
+        output={"answer": 42},
+        error=None,
+        metadata={"duration_ms": 200},
     )
     restored = Experiment.model_validate_json(original.model_dump_json())
     assert original == restored
 
 
 def test_experiment_roundtrip_failed():
-    original = Experiment(task_id="t1", status="failed", steps=[], output=None, error="boom", metadata={})
+    original = Experiment(
+        task_id="t1", status="failed", steps=[], output=None, error="boom", metadata={}
+    )
     restored = Experiment.model_validate_json(original.model_dump_json())
     assert original == restored
 
 
 def test_evaluation_roundtrip():
-    original = Evaluation(task_id="t1", score=0.75, passed=True, details={"reason": "ok"}, metadata={})
+    original = Evaluation(
+        task_id="t1", score=0.75, passed=True, details={"reason": "ok"}, metadata={}
+    )
     restored = Evaluation.model_validate_json(original.model_dump_json())
     assert original == restored
 
 
 def test_insights_roundtrip():
     import json
+
     originals = [
         Insight(id="i1", source_iteration=1, content={"finding": "good"}, metadata={}),
         Insight(id="i2", source_iteration=1, content={"finding": "bad"}, metadata={}),

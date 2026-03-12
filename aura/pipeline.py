@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
-from typing import Callable
 
-from aura.interfaces import Researcher, Experimenter, Evaluator, Reviewer
-from aura.types import Hypothesis, Experiment, Evaluation, Insight
+from aura.interfaces import Evaluator, Experimenter, Researcher, Reviewer
+from aura.types import Evaluation, Experiment, Hypothesis, Insight
 from aura.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -67,9 +66,7 @@ class Pipeline:
             while not self._should_stop(iteration):
                 self.workspace.set_current_iteration(iteration)
                 self._run_iteration(iteration)
-                self.workspace.update_manifest(
-                    iterations_completed=iteration, status="in_progress"
-                )
+                self.workspace.update_manifest(iterations_completed=iteration, status="in_progress")
                 iteration += 1
 
             self.workspace.update_manifest(status="completed")
@@ -114,11 +111,12 @@ class Pipeline:
                     logger.info(f"Iteration {iteration}: new best score {best_this:.4f}")
                 else:
                     self._rollback_artifacts()
-                    logger.info(f"Iteration {iteration}: no improvement, rolled back to iteration {self._best_iteration}")
+                    logger.info(
+                        f"Iteration {iteration}: no improvement, "
+                        f"rolled back to iteration {self._best_iteration}"
+                    )
 
-        new_insights = self.reviewer.review(
-            tasks, trajectories, evaluations, self.workspace
-        )
+        new_insights = self.reviewer.review(tasks, trajectories, evaluations, self.workspace)
         self.workspace.save_insights(new_insights, iteration=iteration)
 
     def _snapshot_artifacts(self, iteration: int) -> None:
@@ -161,10 +159,7 @@ class Pipeline:
 
         trajectories = []
         with ThreadPoolExecutor(max_workers=self.parallel_tasks) as pool:
-            futures = {
-                pool.submit(self._execute_single, task, iteration): task
-                for task in tasks
-            }
+            futures = {pool.submit(self._execute_single, task, iteration): task for task in tasks}
             for future in as_completed(futures):
                 trajectories.append(future.result())
         return trajectories

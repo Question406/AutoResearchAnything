@@ -1,9 +1,9 @@
 import time
 from pathlib import Path
 
-from aura.types import Hypothesis, Experiment, ExperimentStep, Evaluation, Insight
-from aura.interfaces import Researcher, Experimenter, Evaluator, Reviewer
+from aura.interfaces import Evaluator, Experimenter, Researcher, Reviewer
 from aura.pipeline import Pipeline
+from aura.types import Evaluation, Experiment, ExperimentStep, Hypothesis, Insight
 from aura.workspace import Workspace
 
 
@@ -14,36 +14,40 @@ class MockResearcher(Researcher):
 
     def hypothesize(self, insights, workspace):
         self.call_count += 1
-        return [
-            Hypothesis(id=f"task_{i:03d}", spec={"n": i})
-            for i in range(self.num_tasks)
-        ]
+        return [Hypothesis(id=f"task_{i:03d}", spec={"n": i}) for i in range(self.num_tasks)]
 
 
 class MockExperimenter(Experimenter):
     def run_experiment(self, task, workspace):
         step = ExperimentStep(step=0, data={"echo": task.spec}, timestamp="t")
         return Experiment(
-            task_id=task.id, status="completed", steps=[step],
-            output={"done": True}, metadata={},
+            task_id=task.id,
+            status="completed",
+            steps=[step],
+            output={"done": True},
+            metadata={},
         )
 
 
 class MockEvaluator(Evaluator):
     def evaluate(self, task, trajectory, workspace):
         return Evaluation(
-            task_id=task.id, score=0.8, passed=True,
+            task_id=task.id,
+            score=0.8,
+            passed=True,
             details={"auto": True},
         )
 
 
 class MockReviewer(Reviewer):
     def review(self, tasks, trajectories, evaluations, workspace):
-        return [Insight(
-            id=f"insight_{workspace.current_iteration()}",
-            source_iteration=workspace.current_iteration(),
-            content={"num_tasks": len(tasks), "avg_score": 0.8},
-        )]
+        return [
+            Insight(
+                id=f"insight_{workspace.current_iteration()}",
+                source_iteration=workspace.current_iteration(),
+                content={"num_tasks": len(tasks), "avg_score": 0.8},
+            )
+        ]
 
 
 class FailingExperimenter(Experimenter):
@@ -177,7 +181,10 @@ def test_pipeline_parallel_tasks(tmp_path: Path):
         def run_experiment(self, task, workspace):
             time.sleep(0.1)
             return Experiment(
-                task_id=task.id, status="completed", steps=[], output=None,
+                task_id=task.id,
+                status="completed",
+                steps=[],
+                output=None,
             )
 
     ws = Workspace.create(tmp_path / "run")
@@ -200,7 +207,7 @@ def test_pipeline_parallel_tasks(tmp_path: Path):
 
 # --- Artifact and rollback tests ---
 
-from aura.artifacts import FileArtifact
+from aura.artifacts import FileArtifact  # noqa: E402
 
 
 def test_pipeline_with_artifact_snapshot(tmp_path: Path):

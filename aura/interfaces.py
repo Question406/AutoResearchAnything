@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from aura.types import Hypothesis, Experiment, Evaluation, Insight
+    from aura.types import Evaluation, Experiment, Hypothesis, Insight
     from aura.workspace import Workspace
 
 
@@ -16,8 +16,7 @@ class Researcher(ABC):
         pass
 
     @abstractmethod
-    def hypothesize(self, insights: list[Insight], workspace: Workspace) -> list[Hypothesis]:
-        ...
+    def hypothesize(self, insights: list[Insight], workspace: Workspace) -> list[Hypothesis]: ...
 
 
 class Experimenter(ABC):
@@ -28,8 +27,7 @@ class Experimenter(ABC):
         pass
 
     @abstractmethod
-    def run_experiment(self, task: Hypothesis, workspace: Workspace) -> Experiment:
-        ...
+    def run_experiment(self, task: Hypothesis, workspace: Workspace) -> Experiment: ...
 
 
 class Evaluator(ABC):
@@ -40,8 +38,9 @@ class Evaluator(ABC):
         pass
 
     @abstractmethod
-    def evaluate(self, task: Hypothesis, trajectory: Experiment, workspace: Workspace) -> Evaluation:
-        ...
+    def evaluate(
+        self, task: Hypothesis, trajectory: Experiment, workspace: Workspace
+    ) -> Evaluation: ...
 
 
 class Reviewer(ABC):
@@ -58,5 +57,4 @@ class Reviewer(ABC):
         trajectories: list[Experiment],
         evaluations: list[Evaluation],
         workspace: Workspace,
-    ) -> list[Insight]:
-        ...
+    ) -> list[Insight]: ...

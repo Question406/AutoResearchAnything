@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from aura.interfaces import Evaluator
-from aura.types import Hypothesis, Experiment, Evaluation
-from aura.workspace import Workspace
-from aura.utils.parsing import extract_json, render_prompt
 from aura.components.llm import LLMCallable
+from aura.interfaces import Evaluator
+from aura.types import Evaluation, Experiment, Hypothesis
+from aura.utils.parsing import extract_json, render_prompt
+from aura.workspace import Workspace
 
 
 class MetricEvaluator(Evaluator):
@@ -17,15 +17,28 @@ class MetricEvaluator(Evaluator):
         MetricEvaluator(metric="accuracy", baseline=0.5)
     """
 
-    def __init__(self, metric: str, baseline: float = 0.0, higher_is_better: bool = True, max_improvement: float = 0.5):
+    def __init__(
+        self,
+        metric: str,
+        baseline: float = 0.0,
+        higher_is_better: bool = True,
+        max_improvement: float = 0.5,
+    ):
         self.metric = metric
         self.baseline = baseline
         self.higher_is_better = higher_is_better
         self.max_improvement = max_improvement
 
-    def evaluate(self, task: Hypothesis, trajectory: Experiment, workspace: Workspace) -> Evaluation:
+    def evaluate(
+        self, task: Hypothesis, trajectory: Experiment, workspace: Workspace
+    ) -> Evaluation:
         if trajectory.status == "failed":
-            return Evaluation(task_id=task.id, score=0.0, passed=False, details={"reason": "execution_failed", "error": trajectory.error})
+            return Evaluation(
+                task_id=task.id,
+                score=0.0,
+                passed=False,
+                details={"reason": "execution_failed", "error": trajectory.error},
+            )
 
         output = trajectory.output if isinstance(trajectory.output, dict) else {}
         value = output.get(self.metric, self.baseline)
@@ -37,13 +50,21 @@ class MetricEvaluator(Evaluator):
             improvement = self.baseline - value
             passed = value < self.baseline
 
-        score = min(1.0, max(0.0, improvement / self.max_improvement)) if self.max_improvement != 0 else (1.0 if passed else 0.0)
+        score = (
+            min(1.0, max(0.0, improvement / self.max_improvement))
+            if self.max_improvement != 0
+            else (1.0 if passed else 0.0)
+        )
 
         return Evaluation(
             task_id=task.id,
             score=round(score, 4),
             passed=passed,
-            details={self.metric: value, "baseline": self.baseline, "improvement": round(improvement, 4)},
+            details={
+                self.metric: value,
+                "baseline": self.baseline,
+                "improvement": round(improvement, 4),
+            },
         )
 
 
@@ -67,9 +88,16 @@ class LLMJudgeEvaluator(Evaluator):
             'Rate on 0.0-1.0. Respond in JSON: {"score": float, "passed": bool, "reason": string}'
         )
 
-    def evaluate(self, task: Hypothesis, trajectory: Experiment, workspace: Workspace) -> Evaluation:
+    def evaluate(
+        self, task: Hypothesis, trajectory: Experiment, workspace: Workspace
+    ) -> Evaluation:
         if trajectory.status == "failed":
-            return Evaluation(task_id=task.id, score=0.0, passed=False, details={"reason": "execution_failed", "error": trajectory.error})
+            return Evaluation(
+                task_id=task.id,
+                score=0.0,
+                passed=False,
+                details={"reason": "execution_failed", "error": trajectory.error},
+            )
 
         prompt = render_prompt(
             self.prompt_template,

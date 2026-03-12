@@ -1,24 +1,24 @@
 import json
-import pytest
 from pathlib import Path
 
-from aura.types import Hypothesis, Experiment, ExperimentStep, Evaluation, Insight
-from aura.workspace import Workspace
-from aura.components.llm import LLMCallable
+from aura.components.evaluators import LLMJudgeEvaluator, MetricEvaluator
+from aura.components.executors import FunctionExperimenter, LLMExperimenter, ScriptExperimenter
 from aura.components.researchers import LLMResearcher
-from aura.components.executors import ScriptExperimenter, FunctionExperimenter, LLMExperimenter
-from aura.components.evaluators import MetricEvaluator, LLMJudgeEvaluator
 from aura.components.reviewers import LLMReviewer
-
+from aura.types import Evaluation, Experiment, Hypothesis, Insight
+from aura.workspace import Workspace
 
 # --- Mock LLM ---
 
+
 def mock_llm_researcher(prompt: str) -> str:
     """Returns a JSON list of experiment specs."""
-    return json.dumps([
-        {"id": "exp_001", "lr": 0.001, "epochs": 10, "batch_size": 32, "rationale": "baseline"},
-        {"id": "exp_002", "lr": 0.0003, "epochs": 50, "batch_size": 16, "rationale": "low lr"},
-    ])
+    return json.dumps(
+        [
+            {"id": "exp_001", "lr": 0.001, "epochs": 10, "batch_size": 32, "rationale": "baseline"},
+            {"id": "exp_002", "lr": 0.0003, "epochs": 50, "batch_size": 16, "rationale": "low lr"},
+        ]
+    )
 
 
 def mock_llm_judge(prompt: str) -> str:
@@ -26,9 +26,11 @@ def mock_llm_judge(prompt: str) -> str:
 
 
 def mock_llm_reviewer(prompt: str) -> str:
-    return json.dumps([
-        {"finding": "low lr works better", "recommendation": "try lr=0.0002"},
-    ])
+    return json.dumps(
+        [
+            {"finding": "low lr works better", "recommendation": "try lr=0.0002"},
+        ]
+    )
 
 
 def mock_llm_experimenter(prompt: str) -> str:
@@ -37,13 +39,19 @@ def mock_llm_experimenter(prompt: str) -> str:
 
 # --- LLMResearcher ---
 
+
 def test_llm_researcher(tmp_path: Path):
     ws = Workspace.create(tmp_path / "run")
     ws.set_current_iteration(1)
     # Write some input
     (ws.inputs_dir() / "config.txt").write_text("goal: maximize accuracy")
 
-    gen = LLMResearcher(llm=mock_llm_researcher, prompt_template="Generate {{ num_tasks }} tasks.\nInputs: {{ inputs }}\nInsights: {{ insights }}")
+    gen = LLMResearcher(
+        llm=mock_llm_researcher,
+        prompt_template=(
+            "Generate {{ num_tasks }} tasks.\nInputs: {{ inputs }}\nInsights: {{ insights }}"
+        ),
+    )
     tasks = gen.hypothesize([], ws)
 
     assert len(tasks) == 2
@@ -57,12 +65,15 @@ def test_llm_researcher_with_insights(tmp_path: Path):
     ws.set_current_iteration(2)
     insights = [Insight(id="i1", source_iteration=1, content={"finding": "lr=0.001 is good"})]
 
-    gen = LLMResearcher(llm=mock_llm_researcher, prompt_template="Insights: {{ insights }}\nGenerate tasks.")
+    gen = LLMResearcher(
+        llm=mock_llm_researcher, prompt_template="Insights: {{ insights }}\nGenerate tasks."
+    )
     tasks = gen.hypothesize(insights, ws)
     assert len(tasks) == 2
 
 
 # --- ScriptExperimenter ---
+
 
 def test_script_experimenter(tmp_path: Path):
     ws = Workspace.create(tmp_path / "run")
@@ -94,6 +105,7 @@ def test_script_experimenter_failure(tmp_path: Path):
 
 # --- FunctionExperimenter ---
 
+
 def test_function_experimenter(tmp_path: Path):
     ws = Workspace.create(tmp_path / "run")
     ws.set_current_iteration(1)
@@ -111,6 +123,7 @@ def test_function_experimenter(tmp_path: Path):
 
 # --- LLMExperimenter ---
 
+
 def test_llm_experimenter(tmp_path: Path):
     ws = Workspace.create(tmp_path / "run")
     ws.set_current_iteration(1)
@@ -124,6 +137,7 @@ def test_llm_experimenter(tmp_path: Path):
 
 
 # --- MetricEvaluator ---
+
 
 def test_metric_evaluator_above_baseline():
     task = Hypothesis(id="t1", spec={})
@@ -171,6 +185,7 @@ def test_metric_evaluator_lower_is_better():
 
 # --- LLMJudgeEvaluator ---
 
+
 def test_llm_judge_evaluator(tmp_path: Path):
     ws = Workspace.create(tmp_path / "run")
     task = Hypothesis(id="t1", spec={"query": "test"})
@@ -185,6 +200,7 @@ def test_llm_judge_evaluator(tmp_path: Path):
 
 
 # --- LLMReviewer ---
+
 
 def test_llm_reviewer(tmp_path: Path):
     ws = Workspace.create(tmp_path / "run")

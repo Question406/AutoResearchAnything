@@ -1,6 +1,6 @@
-from aura.decorators import as_researcher, as_experimenter, as_evaluator, as_reviewer
-from aura.interfaces import Researcher, Experimenter, Evaluator, Reviewer
-from aura.types import Hypothesis, Experiment, Evaluation, Insight
+from aura.decorators import as_evaluator, as_experimenter, as_researcher, as_reviewer
+from aura.interfaces import Evaluator, Experimenter, Researcher, Reviewer
+from aura.types import Evaluation, Experiment, Hypothesis, Insight
 
 
 def test_as_researcher():

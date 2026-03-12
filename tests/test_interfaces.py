@@ -1,6 +1,7 @@
 import pytest
-from aura.interfaces import Researcher, Experimenter, Evaluator, Reviewer
-from aura.types import Hypothesis, Experiment, ExperimentStep, Evaluation, Insight
+
+from aura.interfaces import Evaluator, Experimenter, Researcher, Reviewer
+from aura.types import Evaluation, Experiment, Hypothesis, Insight
 
 
 def test_cannot_instantiate_abstract_researcher():
@@ -37,9 +38,7 @@ def test_concrete_researcher():
 def test_concrete_experimenter():
     class MyExec(Experimenter):
         def run_experiment(self, task, workspace):
-            return Experiment(
-                task_id=task.id, status="completed", steps=[], output="done"
-            )
+            return Experiment(task_id=task.id, status="completed", steps=[], output="done")
 
     exc = MyExec()
     traj = exc.run_experiment(Hypothesis(id="t1", spec={}), None)

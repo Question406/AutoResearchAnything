@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import re
 import uuid
+
+from aura.components.llm import LLMCallable
 from aura.interfaces import Researcher
 from aura.types import Hypothesis, Insight
-from aura.workspace import Workspace
 from aura.utils.parsing import extract_json, render_prompt
-from aura.components.llm import LLMCallable
+from aura.workspace import Workspace
 
 
 class LLMResearcher(Researcher):
@@ -78,11 +79,13 @@ class LLMResearcher(Researcher):
             new_content = self._extract_code(response)
             artifact.write(new_content)
 
-            return [Hypothesis(
-                id=f"iter_{it:03d}",
-                spec={"artifact": self.artifact},
-                metadata={"change_summary": (artifact_diff or "initial")[:500]},
-            )]
+            return [
+                Hypothesis(
+                    id=f"iter_{it:03d}",
+                    spec={"artifact": self.artifact},
+                    metadata={"change_summary": (artifact_diff or "initial")[:500]},
+                )
+            ]
 
         # Normal mode (generate experiments)
         prompt = render_prompt(

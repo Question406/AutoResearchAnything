@@ -116,16 +116,18 @@ def run_file(file_path: Path, run_dir: Path | None = None) -> None:
 
     if pattern == "main":
         spec = importlib.util.spec_from_file_location("__user_module__", str(file_path))
+        assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
         module.main()
 
     elif pattern == "runner":
         import aura.runner
 
         spec = importlib.util.spec_from_file_location("__user_module__", str(file_path))
+        assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
 
         runner_cls = None
         for _name, obj in inspect.getmembers(module, inspect.isclass):

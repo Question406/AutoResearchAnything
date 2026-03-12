@@ -1,0 +1,41 @@
+name: Regression
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      python-version:
+        description: "Python version to use"
+        required: false
+        default: "3.11"
+
+jobs:
+  regression:
+    name: Regression Tests (Python ${{ inputs.python-version || '3.11' }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ inputs.python-version || '3.11' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version || '3.11' }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dev dependencies
+        run: uv sync --group dev
+
+      - name: Run regression tests
+        run: uv run pytest tests/test_regression.py -v --tb=long
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-failure-artifacts
+          path: /tmp/pytest-*
+          retention-days: 7

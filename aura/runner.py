@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -12,18 +12,16 @@ if TYPE_CHECKING:
 
 class Runner(ABC):
     @abstractmethod
-    def setup_inputs(self, workspace: Workspace) -> None:
-        ...
+    def setup_inputs(self, workspace: Workspace) -> None: ...
 
     @abstractmethod
-    def build_pipeline(self, workspace: Workspace) -> Pipeline:
-        ...
+    def build_pipeline(self, workspace: Workspace) -> Pipeline: ...
 
     def run(self, run_dir: Path | None = None) -> Workspace:
         from aura.workspace import Workspace as WS
 
         if run_dir is None:
-            run_dir = Path("runs") / f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+            run_dir = Path("runs") / f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
 
         workspace = WS.create(run_dir)
         self.setup_inputs(workspace)

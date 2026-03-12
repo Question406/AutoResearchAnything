@@ -1,6 +1,6 @@
-import pytest
 from pathlib import Path
-from aura.artifacts import FileArtifact, DirectoryArtifact
+
+from aura.artifacts import DirectoryArtifact, FileArtifact
 
 
 def test_file_artifact_read_write(tmp_path: Path):

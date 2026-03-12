@@ -1,1 +1,3 @@
-from aura.cli import main; main()
+from aura.cli import main
+
+main()

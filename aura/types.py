@@ -1,8 +1,8 @@
 from __future__ import annotations
-from typing import Union
+
 from pydantic import BaseModel, Field
 
-JsonValue = Union[dict, list, str, float, int, bool, None]
+JsonValue = dict | list | str | float | int | bool | None
 
 
 class Hypothesis(BaseModel):

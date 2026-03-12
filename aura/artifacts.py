@@ -73,7 +73,12 @@ class FileArtifact(Artifact):
             return None
         old_lines = src_file.read_text().splitlines(keepends=True)
         new_lines = self.path.read_text().splitlines(keepends=True)
-        diff = difflib.unified_diff(old_lines, new_lines, fromfile=f"previous/{self.path.name}", tofile=f"current/{self.path.name}")
+        diff = difflib.unified_diff(
+            old_lines,
+            new_lines,
+            fromfile=f"previous/{self.path.name}",
+            tofile=f"current/{self.path.name}",
+        )
         result = "".join(diff)
         return result if result else None
 

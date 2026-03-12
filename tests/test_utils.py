@@ -1,5 +1,7 @@
 import json
+
 import pytest
+
 from aura.utils.parsing import extract_json, render_prompt
 
 
@@ -43,7 +45,9 @@ def test_render_prompt_missing_var():
 
 
 def test_render_prompt_list():
-    result = render_prompt("{% for item in items %}- {{ item }}\n{% endfor %}", items=["a", "b", "c"])
+    result = render_prompt(
+        "{% for item in items %}- {{ item }}\n{% endfor %}", items=["a", "b", "c"]
+    )
     assert "- a" in result and "- b" in result and "- c" in result
 
 

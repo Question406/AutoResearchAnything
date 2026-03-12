@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from aura.types import Hypothesis, Experiment, Evaluation, Insight
+from aura.types import Evaluation, Experiment, Hypothesis, Insight
 
 if TYPE_CHECKING:
     from aura.artifacts import Artifact
@@ -25,7 +25,7 @@ class Workspace:
 
         manifest = {
             "run_id": run_dir.name,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "components": {},
             "config": {},
             "iterations_completed": 0,
@@ -88,7 +88,9 @@ class Workspace:
 
     def load_tasks(self, iteration: int) -> list[Hypothesis]:
         tasks_dir = self.iteration_dir(iteration) / "tasks"
-        return [Hypothesis.model_validate_json(f.read_text()) for f in sorted(tasks_dir.glob("*.json"))]
+        return [
+            Hypothesis.model_validate_json(f.read_text()) for f in sorted(tasks_dir.glob("*.json"))
+        ]
 
     def load_trajectory(self, task_id: str, iteration: int) -> Experiment:
         path = self.iteration_dir(iteration) / "trajectories" / f"{task_id}.json"
@@ -96,7 +98,9 @@ class Workspace:
 
     def load_trajectories(self, iteration: int) -> list[Experiment]:
         traj_dir = self.iteration_dir(iteration) / "trajectories"
-        return [Experiment.model_validate_json(f.read_text()) for f in sorted(traj_dir.glob("*.json"))]
+        return [
+            Experiment.model_validate_json(f.read_text()) for f in sorted(traj_dir.glob("*.json"))
+        ]
 
     def load_evaluation(self, task_id: str, iteration: int) -> Evaluation:
         path = self.iteration_dir(iteration) / "evaluations" / f"{task_id}.json"
@@ -104,7 +108,9 @@ class Workspace:
 
     def load_evaluations(self, iteration: int) -> list[Evaluation]:
         eval_dir = self.iteration_dir(iteration) / "evaluations"
-        return [Evaluation.model_validate_json(f.read_text()) for f in sorted(eval_dir.glob("*.json"))]
+        return [
+            Evaluation.model_validate_json(f.read_text()) for f in sorted(eval_dir.glob("*.json"))
+        ]
 
     def load_insights(self, iteration: int) -> list[Insight]:
         path = self.iteration_dir(iteration) / "insights.json"
@@ -169,14 +175,16 @@ class Workspace:
             total_passed += passed
             total_failed_exec += failed_exec
 
-            iteration_summaries.append({
-                "iteration": it,
-                "num_tasks": len(tasks),
-                "avg_score": round(avg_score, 4),
-                "max_score": round(max_score, 4),
-                "passed": passed,
-                "failed_exec": failed_exec,
-            })
+            iteration_summaries.append(
+                {
+                    "iteration": it,
+                    "num_tasks": len(tasks),
+                    "avg_score": round(avg_score, 4),
+                    "max_score": round(max_score, 4),
+                    "passed": passed,
+                    "failed_exec": failed_exec,
+                }
+            )
 
         return {
             "run_id": m.get("run_id"),
