@@ -24,21 +24,21 @@ The pipeline handles three levels of seed data gracefully:
 | B | `skill.md` + `seeds.json` | Seeds anchor judge calibration from iteration 1 |
 | C | `skill.md` + `seeds.json` + `existing_evals/` | Builds on prior work; deduplicates against existing queries |
 
-**Inputs directory layout** (placed in the run directory before starting):
+**Inputs directory layout** (`<run-dir>/inputs/`, created by `Workspace.create()`):
 ```
-inputs/
+<run-dir>/inputs/
   skill.md            # required — the skill being evaluated
   seeds.json          # optional — manually curated query/response pairs
   existing_evals/     # optional — prior eval files to build on
 ```
 
-Seed examples (`seeds.json`) are never modified or deleted by the pipeline. They serve as the ground truth for judge calibration.
+Seed entries in `seeds.json` are never modified or deleted by the pipeline. They serve as ground truth for judge calibration. Items with `expected: "trigger"` and `seed: true` form the calibration positive set; items with `expected: "no_trigger"` and `seed: true` form the negative set. If seeds contain only one polarity, `calibration_score` falls back to discrimination accuracy on those seeds alone (no pairwise ranking).
 
 ---
 
 ## Artifact: EvalSuite
 
-The central artifact is `eval_suite.json`, a single file that evolves across iterations:
+The central artifact is `eval_suite.json`, a single file that evolves across iterations. It is located at `<run-dir>/eval_suite.json` so `FileArtifact("eval_suite.json")` resolves it relative to the working directory when `run.py` is invoked.
 
 ```json
 {
@@ -89,7 +89,8 @@ The central artifact is `eval_suite.json`, a single file that evolves across ite
 - `seed: true` items are never deleted or modified by the pipeline
 - Judge item weights sum to 1.0
 - `expected` is one of `"trigger"` or `"no_trigger"`
-- Code checks reference a stdlib of helper functions; the pipeline may add new helpers but not redefine existing ones
+- Code checks are string expressions naming a function from `judge_stdlib.py`; the pipeline may add new stdlib functions but not redefine existing ones
+- Because the pipeline produces exactly one `Hypothesis` per iteration (artifact mode), rollback compares `iteration_score` directly across iterations
 
 ---
 
@@ -122,25 +123,26 @@ Hypothesize  →  Experiment  →  Evaluate  →  Review
 ### Researcher
 
 Uses `LLMResearcher` in artifact mode. Each iteration reads:
-- `skill.md` from `inputs/`
-- Current `eval_suite.json` (the artifact)
-- Reviewer insights from previous iterations
+- `skill.md` from `inputs/` (arrives in `{{ inputs }}` — `LLMResearcher._read_inputs` concatenates all files under `inputs/`)
+- Current `eval_suite.json` (in `{{ artifact_content }}`)
+- Diff from the previous iteration (in `{{ artifact_diff }}`)
+- Reviewer insights from previous iterations (in `{{ insights }}`)
 
 Proposes mutations to the suite: add queries, remove redundant ones, add/refine judge items, adjust weights. Outputs an updated `eval_suite.json`. One hypothesis per iteration — the whole suite is the unit of improvement.
 
-**Prompt template placeholders**: `{{ skill_content }}`, `{{ artifact_content }}`, `{{ artifact_diff }}`, `{{ insights }}`, `{{ iteration }}`
+**Prompt template placeholders** (provided by `LLMResearcher` in artifact mode):
+`{{ inputs }}`, `{{ artifact_content }}`, `{{ artifact_diff }}`, `{{ insights }}`, `{{ iteration }}`
 
 ### Experimenter
 
-Pluggable via an abstract `SkillExecutor` interface:
+Pluggable via an abstract `SkillExecutor` interface. `ExecutionResult` is a Pydantic model so it serializes cleanly into `Experiment.output`:
 
 ```python
 class SkillExecutor(ABC):
     @abstractmethod
     def execute(self, query: str, skill_content: str) -> ExecutionResult: ...
 
-@dataclass
-class ExecutionResult:
+class ExecutionResult(BaseModel):
     skill_invoked: bool
     skill_name: str | None
     response: str
@@ -157,26 +159,37 @@ class ExecutionResult:
 
 Each iteration the Experimenter:
 1. Samples `sample_size` queries from the suite (configurable)
-2. Always runs all seed examples (for calibration stability)
+2. Always runs all seed examples regardless of `sample_size` (for calibration stability)
 3. Runs each query through the executor and records `ExecutionResult`
-4. For each judge item of type `"code"`, evaluates the check function against each response
-5. For each judge item of type `"llm"`, calls the LLM judge with the rubric
+4. For each judge item of type `"code"`, calls the corresponding `judge_stdlib` function with the response string; result is `1.0` if `True`, `0.0` if `False`
+5. For each judge item of type `"llm"`, calls the LLM judge with the rubric; result is a float `[0,1]`
 
 The trajectory (`Experiment`) stores all results as structured JSON.
+
+### Judge Stdlib
+
+Code check functions live in `judge_stdlib.py` and have the signature `(response: str) -> bool`. They are called by name — the `check` field in the judge item is a plain function name (no `eval`/`exec`): the Experimenter looks up the name in the stdlib module's namespace. The pipeline can only extend the stdlib with new functions; existing functions are frozen once written to prevent drift.
+
+Example functions: `skill_tool_called(response, skill_name)`, `no_implementation_before_skill(response)`.
 
 ### Evaluator
 
 Scores the suite on two axes, producing a single `score ∈ [0,1]`:
 
 ```
-discrimination_score = correct_predictions / total_sampled_queries
+discrimination_score = balanced_accuracy(sampled_queries)
+                     = 0.5 * (trigger_recall + no_trigger_recall)
 calibration_score    = judge_items_passing_pairwise_ranking / total_judge_items
 iteration_score      = 0.5 * discrimination_score + 0.5 * calibration_score
 ```
 
-**Pairwise calibration**: for each judge item, for each (seed_positive, seed_negative) pair, check that `judge_score(positive) > judge_score(negative)`. A judge item passes if it ranks all seed pairs correctly.
+Balanced accuracy guards against suites that are heavily skewed toward one `expected` polarity.
 
-**Tier A bootstrap**: when no seeds exist, the first iteration generates synthetic calibration pairs (an obvious trigger query and an obvious non-trigger query) to give the calibration score something to anchor on. These synthetic pairs are flagged and can be replaced by real seeds later.
+**Pairwise calibration**: for each judge item, for each `(seed_positive, seed_negative)` pair, check that `judge_score(positive) > judge_score(negative)`. For `"code"` items, scores are `1.0` (True) or `0.0` (False); a pair passes if the positive scores `1.0` and the negative scores `0.0`. A judge item passes calibration if it ranks all seed pairs correctly.
+
+**Single-polarity seeds**: if seeds contain only positives or only negatives, pairwise ranking is undefined. In this case `calibration_score` falls back to per-item accuracy on the available seeds (how often the judge item gives the right answer for the known polarity).
+
+**Tier A bootstrap**: when no seeds exist, the Experimenter generates one synthetic positive and one synthetic negative in the first iteration to seed calibration. These are flagged `synthetic: true` and can be replaced by real seeds later.
 
 ### Reviewer
 
@@ -191,11 +204,9 @@ These insights are fed to the Researcher in the next iteration.
 
 ## Scoring & Stopping
 
-**Rollback**: `rollback="best"` — the workspace preserves the `eval_suite.json` with the highest `iteration_score`. Even if a later iteration regresses, the best version is always available.
+**Rollback**: `rollback="best"` — the workspace preserves the `eval_suite.json` with the highest `iteration_score`. Because the pipeline produces exactly one `Hypothesis` per iteration, `best_this == avg_score` and the rollback logic behaves as expected.
 
-**Stopping conditions** (first one reached):
-1. `max_iterations` exceeded
-2. Score hasn't improved by `> 0.01` for `convergence_patience` consecutive iterations (default: 3)
+**Stopping**: `Pipeline._should_stop` only checks `max_iterations`. Early stopping based on score plateau is handled by `EvalSuiteEvaluator`: when `iteration_score` has not improved by `> 0.01` for `convergence_patience` consecutive iterations (default: 3), it raises a `StopIteration` sentinel that the `EvalSuiteExperimenter` catches to gracefully exit the loop.
 
 ---
 
@@ -203,36 +214,38 @@ These insights are fed to the Researcher in the next iteration.
 
 ```python
 # run.py
-from aura import Pipeline, Workspace
-from aura.components import LLMResearcher, LLMReviewer, anthropic_llm
+from aura import Pipeline, Workspace, anthropic_llm
+from aura.components import LLMResearcher, LLMReviewer
 from aura.artifacts import FileArtifact
 from skill_eval import EvalSuiteExperimenter, EvalSuiteEvaluator, ClaudeAPIExecutor
 
-llm = anthropic_llm()
-workspace = Workspace("./runs/aura-skill-eval")
-artifact = FileArtifact("eval_suite", path="eval_suite.json")
+def main():
+    llm = anthropic_llm()
+    workspace = Workspace.create("./runs/aura-skill-eval")
+    # FileArtifact takes a path; name is derived from filename ("eval_suite.json")
+    artifact = FileArtifact("eval_suite.json")
 
-pipeline = Pipeline(
-    researcher=LLMResearcher(
-        llm=llm,
-        prompt_template=RESEARCHER_PROMPT,
-        artifact="eval_suite",
-    ),
-    experimenter=EvalSuiteExperimenter(
-        executor=ClaudeAPIExecutor(),
-        sample_size=10,
-    ),
-    evaluator=EvalSuiteEvaluator(),
-    reviewer=LLMReviewer(llm=llm, prompt_template=REVIEWER_PROMPT),
-    workspace=workspace,
-    artifacts=[artifact],
-    rollback="best",
-    max_iterations=10,
-)
-pipeline.run()
+    pipeline = Pipeline(
+        researcher=LLMResearcher(
+            llm=llm,
+            prompt_template=RESEARCHER_PROMPT,
+            artifact="eval_suite.json",  # must match artifact.name
+        ),
+        experimenter=EvalSuiteExperimenter(
+            executor=ClaudeAPIExecutor(),
+            sample_size=10,
+        ),
+        evaluator=EvalSuiteEvaluator(convergence_patience=3),
+        reviewer=LLMReviewer(llm=llm, prompt_template=REVIEWER_PROMPT),
+        workspace=workspace,
+        artifacts=[artifact],
+        rollback="best",
+        max_iterations=10,
+    )
+    pipeline.run()
 ```
 
-Or via AURA CLI (if wired with `main()` pattern):
+Or via AURA CLI:
 ```bash
 aura run skill_eval/run.py --run-dir ./runs/aura-skill-eval
 ```
@@ -249,19 +262,26 @@ examples/skill-eval/
   skill_eval/
     __init__.py
     experimenter.py         # EvalSuiteExperimenter
-    evaluator.py            # EvalSuiteEvaluator
+    evaluator.py            # EvalSuiteEvaluator (with convergence_patience)
+    schema.py               # EvalSuite, Query, JudgeItem Pydantic models
     executors/
       __init__.py
-      base.py               # SkillExecutor ABC + ExecutionResult
+      base.py               # SkillExecutor ABC + ExecutionResult (Pydantic)
       claude_api.py         # ClaudeAPIExecutor
       llm_predict.py        # LLMPredictExecutor
       mock.py               # MockExecutor
-    judge_stdlib.py         # built-in code check functions
-    schema.py               # EvalSuite pydantic models
+    judge_stdlib.py         # built-in code check functions (frozen interface)
   prompts/
     researcher.md           # Jinja2 prompt template
     reviewer.md             # Jinja2 prompt template
-  inputs/                   # user drops skill.md + optional seeds here
+```
+
+Inputs are placed in `<run-dir>/inputs/` (created by `Workspace.create()`):
+```
+<run-dir>/inputs/
+  skill.md
+  seeds.json          # optional
+  existing_evals/     # optional
 ```
 
 ---
@@ -269,7 +289,8 @@ examples/skill-eval/
 ## Key Constraints
 
 - Python >= 3.11, managed with `uv`
-- Only new dependencies: `anthropic` (for `ClaudeAPIExecutor`), already present in examples
+- Only new dependency: `anthropic` (for `ClaudeAPIExecutor`), already present in mock-autonas example
 - `skill_eval/` is importable as a package; `run.py` uses the `main()` CLI pattern
 - All prompt templates use Jinja2 with AURA's `render_prompt` utility
-- Judge code checks are plain Python functions with signature `(response: str) -> bool`
+- `ExecutionResult` is a Pydantic `BaseModel` for serialization consistency with `Experiment.output`
+- Judge code checks are looked up by name in `judge_stdlib` module namespace — no `eval`/`exec` of LLM-generated strings
