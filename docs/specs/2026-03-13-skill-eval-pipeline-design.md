@@ -64,7 +64,7 @@ The central artifact is `eval_suite.json`, a single file that evolves across ite
       "id": "j001",
       "type": "code",
       "description": "Skill tool was called with correct skill name",
-      "check": "skill_tool_called(response, 'aura')",
+      "check": {"fn": "skill_tool_called", "args": ["aura"]},
       "weight": 0.4
     },
     {
@@ -78,7 +78,7 @@ The central artifact is `eval_suite.json`, a single file that evolves across ite
       "id": "j003",
       "type": "code",
       "description": "No premature implementation before skill invocation",
-      "check": "no_implementation_before_skill(response)",
+      "check": {"fn": "no_implementation_before_skill"},
       "weight": 0.3
     }
   ]
@@ -89,7 +89,7 @@ The central artifact is `eval_suite.json`, a single file that evolves across ite
 - `seed: true` items are never deleted or modified by the pipeline
 - Judge item weights sum to 1.0
 - `expected` is one of `"trigger"` or `"no_trigger"`
-- Code checks are string expressions naming a function from `judge_stdlib.py`; the pipeline may add new stdlib functions but not redefine existing ones
+- Code checks use a structured descriptor `{"fn": "...", "args": [...]}` where `fn` names a function in `judge_stdlib.py` and `args` is an optional list of extra positional arguments; the pipeline may add new stdlib functions but not redefine existing ones
 - Because the pipeline produces exactly one `Hypothesis` per iteration (artifact mode), rollback compares `iteration_score` directly across iterations
 
 ---
@@ -168,9 +168,9 @@ The trajectory (`Experiment`) stores all results as structured JSON.
 
 ### Judge Stdlib
 
-Code check functions live in `judge_stdlib.py` and have the signature `(response: str) -> bool`. They are called by name — the `check` field in the judge item is a plain function name (no `eval`/`exec`): the Experimenter looks up the name in the stdlib module's namespace. The pipeline can only extend the stdlib with new functions; existing functions are frozen once written to prevent drift.
+Code check functions live in `judge_stdlib.py`. The `check` field is a structured descriptor `{"fn": "...", "args": [...]}`. The Experimenter resolves `fn` via `getattr(judge_stdlib, fn)` (no `eval`/`exec`) and calls `fn(response, *args)`. All stdlib functions have the signature `(response: str, *args) -> bool`.
 
-Example functions: `skill_tool_called(response, skill_name)`, `no_implementation_before_skill(response)`.
+Example functions: `skill_tool_called(response, skill_name)`, `no_implementation_before_skill(response)`. The pipeline can add new functions to the stdlib but existing functions are frozen once written to prevent drift.
 
 ### Evaluator
 
@@ -206,7 +206,7 @@ These insights are fed to the Researcher in the next iteration.
 
 **Rollback**: `rollback="best"` — the workspace preserves the `eval_suite.json` with the highest `iteration_score`. Because the pipeline produces exactly one `Hypothesis` per iteration, `best_this == avg_score` and the rollback logic behaves as expected.
 
-**Stopping**: `Pipeline._should_stop` only checks `max_iterations`. Early stopping based on score plateau is handled by `EvalSuiteEvaluator`: when `iteration_score` has not improved by `> 0.01` for `convergence_patience` consecutive iterations (default: 3), it raises a `StopIteration` sentinel that the `EvalSuiteExperimenter` catches to gracefully exit the loop.
+**Stopping**: `Pipeline._should_stop` only checks `max_iterations`. Early stopping is handled by `EvalSuiteEvaluator`: when `iteration_score` has not improved by `> 0.01` for `convergence_patience` consecutive iterations (default: 3), it raises a custom `ConvergedException(Exception)`. This propagates out of `Pipeline.run()` after the `finally` block runs `teardown()` cleanly. The caller's `main()` may catch it or let it terminate the process.
 
 ---
 
@@ -293,4 +293,4 @@ Inputs are placed in `<run-dir>/inputs/` (created by `Workspace.create()`):
 - `skill_eval/` is importable as a package; `run.py` uses the `main()` CLI pattern
 - All prompt templates use Jinja2 with AURA's `render_prompt` utility
 - `ExecutionResult` is a Pydantic `BaseModel` for serialization consistency with `Experiment.output`
-- Judge code checks are looked up by name in `judge_stdlib` module namespace — no `eval`/`exec` of LLM-generated strings
+- Judge code checks use `{"fn": "...", "args": [...]}` descriptors; `fn` is resolved via `getattr(judge_stdlib, fn)` — no `eval`/`exec` of LLM-generated strings
