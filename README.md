@@ -13,7 +13,7 @@ graph LR
 ## Installation
 
 ```bash
-git clone https://github.com/Question406/AutoResearchAnything.git
+git clone https://github.com/UCSB-NLP-Chang/AutoResearchAnything.git
 cd AutoResearchAnything
 uv sync
 ```
@@ -25,7 +25,7 @@ An LLM-guided hyperparameter search in one file:
 ```python
 from aura import (
     Pipeline, Workspace, setup_logging,
-    LLMResearcher, ScriptExperimenter, MetricEvaluator, LLMReviewer,
+    Researcher, ScriptExperimenter, MetricEvaluator, Reviewer,
     anthropic_llm,
 )
 
@@ -35,14 +35,19 @@ llm = anthropic_llm(model="claude-sonnet-4-20250514")
 workspace = Workspace.create("./runs/experiment")
 
 pipeline = Pipeline(
-    researcher=LLMResearcher(
-        llm=llm,
-        prompt_template="Propose {{ num_tasks }} experiments as JSON list with: id, lr, epochs, batch_size.\n\nContext: {{ inputs }}\nInsights: {{ insights }}",
+    researcher=Researcher(
+        runner=llm,
+        prompt_template=(
+            "Propose {{ num_tasks }} experiments as JSON list with: id, lr, epochs, batch_size.\n\n"
+            "Context: {{ inputs }}\nInsights: {{ insights }}"
+        ),
         num_tasks=3,
     ),
-    experimenter=ScriptExperimenter("python train.py --lr {lr} --epochs {epochs} --batch-size {batch_size}"),
+    experimenter=ScriptExperimenter(
+        "python train.py --lr {lr} --epochs {epochs} --batch-size {batch_size}"
+    ),
     evaluator=MetricEvaluator(metric="accuracy", baseline=0.5),
-    reviewer=LLMReviewer(llm=llm),
+    reviewer=Reviewer(runner=llm),
     workspace=workspace,
     max_iterations=3,
 )
@@ -60,14 +65,88 @@ Four pluggable components form the pipeline:
 
 | Component | Role | Built-in implementations |
 |---|---|---|
-| **Researcher** | Proposes hypotheses to test and modifies seed artifact | `LLMResearcher` |
-| **Experimenter** | Executes each experiment | `ScriptExperimenter`, `FunctionExperimenter`, `LLMExperimenter` |
-| **Evaluator** | Scores the results | `MetricEvaluator`, `LLMJudgeEvaluator` |
-| **Reviewer** | Distills insights from a batch of experiment at this iteration | `LLMReviewer` |
+| **Researcher** | Proposes hypotheses | `Researcher(runner=..., prompt_template=...)` |
+| **Experimenter** | Executes each hypothesis | `ScriptExperimenter`, `FunctionExperimenter`, `LLMExperimenter` |
+| **Evaluator** | Scores the results | `MetricEvaluator`, `Evaluator(runner=..., prompt_template=...)` |
+| **Reviewer** | Distills insights from a batch | `Reviewer(runner=..., prompt_template=...)` |
 
-Use the built-in components for common patterns, or implement the [ABCs](docs/architecture.md) for full control. The LLM interface is a simple `Callable[[str], str]` that works with any provider, SDK, or CLI agent.
+Each stage accepts a `runner=` argument — any `LLMCallable` or `Runner` instance — which becomes the default implementation. Override the stage's core method for full control.
 
 Every run is fully serialized: hypotheses, experiments, evaluations, and insights are saved as human-readable JSON in a workspace directory. The pipeline supports tracked **artifacts** (files or directories that evolve across iterations) with automatic snapshotting and optional rollback to the best-scoring state.
+
+## Runner Abstraction
+
+`Runner` is an AURA-agnostic execution backend. All three LLM-backed stages (`Researcher`, `Evaluator`, `Reviewer`) accept a `runner=` argument:
+
+```python
+from aura import LLMRunner, FunctionRunner, CommandRunner, as_runner
+
+# Wrap any LLMCallable
+runner = LLMRunner(anthropic_llm())
+
+# Wrap a Python function
+runner = FunctionRunner(lambda prompt, ctx: {"content": my_fn(prompt)})
+
+# Shell out to a CLI agent (claude, codex, aider, ...)
+runner = CommandRunner(["claude", "--output-format", "json"], output_format="json")
+
+# as_runner() normalises LLMCallable | Runner -> Runner
+runner = as_runner(my_llm_callable)
+```
+
+Pass any of these as `runner=` to `Researcher`, `Evaluator`, or `Reviewer`:
+
+```python
+Researcher(runner=CommandRunner(["claude"]), prompt_template="...")
+```
+
+## Composable Experimenter Backends
+
+`SingleTrialExperimenter` is the base for experimenters that run one trial per hypothesis. Compose an experimenter from sub-components:
+
+| Sub-ABC | Role | Implementations |
+|---|---|---|
+| `Environment` | Set up execution environment | `CondaEnvironment`, `VenvEnvironment`, `UvEnvironment`, `DockerEnvironment` |
+| `Executor` | Run the hypothesis | `ScriptExecutor`, `FunctionExecutor`, `LLMExecutor`, `BwrapExecutor`, `BindfsExecutor`, `SlurmExecutor` |
+| `Collector` | Parse executor output into a `Trial` | `StdoutCollector`, `JSONFileCollector`, `LogParserCollector` |
+| `Aggregator` | Reduce trials to a summary | `LastTrialAggregator`, `BestTrialAggregator`, `AllTrialsAggregator` |
+
+```python
+from aura import (
+    SingleTrialExperimenter,
+    ScriptExecutor, StdoutCollector, BestTrialAggregator,
+    CondaEnvironment,
+)
+
+class MyExperimenter(SingleTrialExperimenter):
+    env = CondaEnvironment("ml-env")
+    executor = ScriptExecutor("python train.py --lr {lr}")
+    collector = StdoutCollector(parse_json=True)
+
+    def prepare(self, task, workspace):
+        ctx = super().prepare(task, workspace)
+        return {**ctx, **self.env.setup(task, workspace)}
+
+    def execute(self, task, context, workspace):
+        return self.executor.run(task, context, workspace)
+
+    def collect(self, task, raw, context, workspace):
+        return self.collector.collect(task, raw, context, workspace)
+```
+
+For sandboxed execution, use `BwrapExecutor` (bubblewrap, no root required) or `BindfsExecutor` (FUSE bind-mounts for read-only inputs).
+
+## Type Hierarchy
+
+```
+Hypothesis  →  Trial / TrialStep  →  Experiment  →  Evaluation  →  Insight
+```
+
+- `Hypothesis`: a proposed configuration (`id` + `spec` dict)
+- `Trial` / `TrialStep`: output of one execution attempt with timestamped steps
+- `Experiment`: aggregated result of one or more trials for a hypothesis
+- `Evaluation`: score + pass/fail for an experiment
+- `Insight`: a distilled finding from a batch of evaluations
 
 ## Examples
 
@@ -99,7 +178,7 @@ uv sync && uv run pytest -v
 @software{aura2025,
   title  = {AURA: Auto Research Anything},
   author = {AURA Contributors},
-  url    = {https://github.com/Question406/AutoResearchAnything},
+  url    = {https://github.com/UCSB-NLP-Chang/AutoResearchAnything},
   year   = {2025},
 }
 ```

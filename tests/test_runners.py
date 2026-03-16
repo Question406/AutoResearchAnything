@@ -7,11 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from aura.components.runners import CommandRunner, FunctionRunner, LLMRunner, as_runner
+from aura.components.runners import FunctionRunner, LLMRunner, as_runner
 from aura.interfaces import Evaluator, Researcher, Reviewer, Runner
 from aura.types import Evaluation, Experiment, Hypothesis, Insight
 from aura.workspace import Workspace
-
 
 # --- Mock LLM ---
 
@@ -102,7 +101,11 @@ class TestResearcherWithRunner:
         ws = Workspace.create(tmp_path / "run")
         ws.set_current_iteration(1)
 
-        researcher = Researcher(runner=mock_llm, prompt_template="Generate {{ num_tasks }} tasks. Insights: {{ insights }}", num_tasks=3)
+        researcher = Researcher(
+            runner=mock_llm,
+            prompt_template="Generate {{ num_tasks }} tasks. Insights: {{ insights }}",
+            num_tasks=3,
+        )
         tasks = researcher.hypothesize([], ws)
 
         assert len(tasks) == 1
@@ -263,8 +266,8 @@ class TestBackwardCompat:
         assert issubclass(LLMReviewer, Reviewer)
 
     def test_cli_runner_alias(self):
-        from aura.runner import Runner as CliRunnerAlias
         from aura.runner import CliRunner
+        from aura.runner import Runner as CliRunnerAlias
 
         assert CliRunnerAlias is CliRunner
 

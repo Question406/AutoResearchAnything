@@ -184,7 +184,12 @@ class FunctionExecutor(Executor):
 class LLMExecutor(Executor):
     """Send a hypothesis to an LLM or Runner and return its response."""
 
-    def __init__(self, llm: Callable[[str], str] | None = None, prompt_template: str | None = None, runner=None):
+    def __init__(
+        self,
+        llm: Callable[[str], str] | None = None,
+        prompt_template: str | None = None,
+        runner=None,
+    ):
         self.prompt_template = prompt_template or "Complete this task:\n\n{{ query }}"
         if runner is not None:
             from aura.components.runners import as_runner
@@ -211,6 +216,7 @@ class LLMExecutor(Executor):
 
         constraints = workspace.constraints() if workspace else {}
         prompt = render_prompt(self.prompt_template, **task.spec, constraints=constraints)
+        assert self.llm is not None
         response = self.llm(prompt)
         return {"prompt": prompt, "response": response}
 
@@ -234,8 +240,8 @@ class SlurmExecutor(Executor):
         self.timeout = timeout
 
     def run(self, task: Hypothesis, context: dict, workspace: Workspace) -> dict:
-        import time
         import tempfile
+        import time
 
         script_content = self.script_template.format(**task.spec)
         with tempfile.NamedTemporaryFile(

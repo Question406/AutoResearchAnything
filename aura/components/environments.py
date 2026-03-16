@@ -25,7 +25,11 @@ class CondaEnvironment(Environment):
         result = subprocess.run(
             ["conda", "env", "list"], capture_output=True, text=True
         )
-        envs = [line.split()[0] for line in result.stdout.splitlines() if line and not line.startswith("#")]
+        envs = [
+            line.split()[0]
+            for line in result.stdout.splitlines()
+            if line and not line.startswith("#")
+        ]
         if self.env_name not in envs:
             raise RuntimeError(f"Conda environment '{self.env_name}' not found. Available: {envs}")
         context = {
@@ -89,7 +93,9 @@ class UvEnvironment(VenvEnvironment):
         pip = str(self.path / "bin" / "pip")
 
         if self.requirements:
-            subprocess.run(["uv", "pip", "install", "-r", self.requirements, "--python", python], check=True)
+            subprocess.run(
+                ["uv", "pip", "install", "-r", self.requirements, "--python", python], check=True
+            )
 
         workspace.update_manifest(environment={
             "type": "uv",
@@ -128,7 +134,9 @@ class DockerEnvironment(Environment):
 
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         container_id = result.stdout.strip()
-        workspace.update_manifest(environment={"type": "docker", "image": self.image, "container_id": container_id})
+        workspace.update_manifest(
+            environment={"type": "docker", "image": self.image, "container_id": container_id}
+        )
         return {"container_id": container_id, "image": self.image}
 
     def teardown(self, context: dict, workspace: Workspace) -> None:

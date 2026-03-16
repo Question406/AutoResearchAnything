@@ -34,7 +34,8 @@ class BestTrialAggregator(Aggregator):
         completed = [t for t in trials if t.status == "completed" and isinstance(t.output, dict)]
         if not completed:
             return trials[-1].output
-        key = lambda t: t.output.get(self.metric, float("-inf") if self.higher_is_better else float("inf"))  # noqa: E731
+        default = float("-inf") if self.higher_is_better else float("inf")
+        key = lambda t: t.output.get(self.metric, default)  # noqa: E731
         best = max(completed, key=key) if self.higher_is_better else min(completed, key=key)
         return best.output
 

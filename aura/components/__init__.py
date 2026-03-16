@@ -1,4 +1,8 @@
-from aura.components.aggregators import AllTrialsAggregator, BestTrialAggregator, LastTrialAggregator
+from aura.components.aggregators import (
+    AllTrialsAggregator,
+    BestTrialAggregator,
+    LastTrialAggregator,
+)
 from aura.components.backends import (
     BindfsExecutor,
     BwrapExecutor,
@@ -10,7 +14,12 @@ from aura.components.backends import (
     SlurmExecutor,
     StdoutCollector,
 )
-from aura.components.environments import CondaEnvironment, DockerEnvironment, UvEnvironment, VenvEnvironment
+from aura.components.environments import (
+    CondaEnvironment,
+    DockerEnvironment,
+    UvEnvironment,
+    VenvEnvironment,
+)
 from aura.components.evaluators import LLMJudgeEvaluator, MetricEvaluator
 from aura.components.executors import FunctionExperimenter, LLMExperimenter, ScriptExperimenter
 from aura.components.llm import LLMCallable

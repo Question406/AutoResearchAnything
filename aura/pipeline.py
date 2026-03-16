@@ -181,7 +181,7 @@ class Pipeline:
 
         logger.error(f"Task {task.id} failed after {self.max_retries} attempts")
         failed = Experiment(
-            task_id=task.id,
+            hypothesis_id=task.id,
             status="failed",
             steps=[],
             output=None,

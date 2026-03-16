@@ -3,8 +3,6 @@
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from aura.interfaces import SingleTrialExperimenter
 from aura.types import Hypothesis, Trial
 from aura.workspace import Workspace

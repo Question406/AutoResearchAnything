@@ -45,6 +45,7 @@ class LLMResearcher(Researcher):
         self.artifact = artifact  # name of artifact to modify, or None
 
     def hypothesize(self, insights: list[Insight], workspace: Workspace) -> list[Hypothesis]:
+        assert self.prompt_template is not None
         # Build inputs context from workspace
         inputs_context = self._read_inputs(workspace)
 

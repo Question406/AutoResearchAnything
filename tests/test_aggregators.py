@@ -1,6 +1,10 @@
 """Tests for Aggregator implementations."""
 
-from aura.components.aggregators import AllTrialsAggregator, BestTrialAggregator, LastTrialAggregator
+from aura.components.aggregators import (
+    AllTrialsAggregator,
+    BestTrialAggregator,
+    LastTrialAggregator,
+)
 from aura.types import Trial
 
 

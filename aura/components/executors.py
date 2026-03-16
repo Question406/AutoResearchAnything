@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import subprocess
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -11,9 +9,8 @@ from aura.components.backends.collector_backends import StdoutCollector
 from aura.components.backends.executor_backends import ScriptExecutor
 from aura.components.llm import LLMCallable
 from aura.interfaces import SingleTrialExperimenter
-from aura.types import Trial, TrialStep
+from aura.types import Hypothesis, Trial, TrialStep
 from aura.workspace import Workspace
-from aura.types import Hypothesis
 
 
 class ScriptExperimenter(SingleTrialExperimenter):
@@ -104,7 +101,9 @@ class LLMExperimenter(SingleTrialExperimenter):
     Accepts either a Runner instance or an LLMCallable.
     """
 
-    def __init__(self, llm: LLMCallable | None = None, prompt_template: str | None = None, runner=None):
+    def __init__(
+        self, llm: LLMCallable | None = None, prompt_template: str | None = None, runner=None
+    ):
         super().__init__(aggregator=LastTrialAggregator())
         self.prompt_template = prompt_template or "Complete this task:\n\n{{ query }}"
         if runner is not None:
@@ -134,6 +133,7 @@ class LLMExperimenter(SingleTrialExperimenter):
 
         constraints = workspace.constraints() if workspace else {}
         prompt = render_prompt(self.prompt_template, **task.spec, constraints=constraints)
+        assert self.llm is not None
         response = self.llm(prompt)
         return {"prompt": prompt, "response": response}
 

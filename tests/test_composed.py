@@ -1,15 +1,13 @@
 """Tests for composed experimenter patterns (type compat, multi-trial, new type hierarchy)."""
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from aura.components.aggregators import BestTrialAggregator, LastTrialAggregator
+from aura.components.aggregators import BestTrialAggregator
 from aura.interfaces import Experimenter, SingleTrialExperimenter
 from aura.types import Experiment, Hypothesis, Trial, TrialStep
 from aura.workspace import Workspace
-
 
 # --- Type hierarchy ---
 
@@ -158,7 +156,9 @@ def test_single_trial_with_best_aggregator(tmp_path: Path):
             return {"acc": task.spec.get("acc", 0.5)}
 
         def collect(self, task, raw, context, workspace):
-            return Trial(id=f"{task.id}-0", spec=task.spec, status="completed", steps=[], output=raw)
+            return Trial(
+                id=f"{task.id}-0", spec=task.spec, status="completed", steps=[], output=raw
+            )
 
     ws = Workspace.create(tmp_path / "run")
     exp_impl = AccExperimenter(aggregator=BestTrialAggregator(metric="acc"))

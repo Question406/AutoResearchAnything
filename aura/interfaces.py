@@ -63,7 +63,7 @@ class Researcher(ABC):
             runner.teardown()
 
     def hypothesize(self, insights: list[Insight], workspace: Workspace) -> list[Hypothesis]:
-        if getattr(self, "runner", None) is None:
+        if self.runner is None or self.prompt_template is None:
             raise NotImplementedError("Provide a runner or subclass and override hypothesize()")
 
         from aura.types import Hypothesis
@@ -145,7 +145,6 @@ class SingleTrialExperimenter(Experimenter):
 
     def collect(self, task: Hypothesis, raw: Any, context: dict, workspace: Workspace) -> Trial:
         """Convert raw executor output into a Trial. Override for custom collection."""
-        from datetime import UTC, datetime
 
         from aura.types import Trial
 
@@ -154,7 +153,11 @@ class SingleTrialExperimenter(Experimenter):
             spec=task.spec,
             status="completed",
             steps=[],
-            output=raw if isinstance(raw, (dict, list, str, int, float, bool, type(None))) else str(raw),
+            output=(
+                raw
+                if isinstance(raw, (dict, list, str, int, float, bool, type(None)))
+                else str(raw)
+            ),
         )
 
     def cleanup(self, task: Hypothesis, context: dict, workspace: Workspace) -> None:
@@ -262,7 +265,7 @@ class Evaluator(ABC):
     def evaluate(
         self, task: Hypothesis, experiment: Experiment, workspace: Workspace
     ) -> Evaluation:
-        if getattr(self, "runner", None) is None:
+        if self.runner is None or self.prompt_template is None:
             raise NotImplementedError("Provide a runner or subclass and override evaluate()")
 
         from aura.types import Evaluation
@@ -327,7 +330,7 @@ class Reviewer(ABC):
         evaluations: list[Evaluation],
         workspace: Workspace,
     ) -> list[Insight]:
-        if getattr(self, "runner", None) is None:
+        if self.runner is None or self.prompt_template is None:
             raise NotImplementedError("Provide a runner or subclass and override review()")
 
         from aura.types import Insight
