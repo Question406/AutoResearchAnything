@@ -13,6 +13,9 @@ from aura.workspace import Workspace
 class LLMResearcher(Researcher):
     """Generate tasks by prompting an LLM.
 
+    .. deprecated::
+        Use ``Researcher(runner=llm, prompt_template=...)`` instead.
+
     The prompt_template should contain Jinja2 placeholders:
     - {{ inputs }} — contents of workspace inputs/ directory context
     - {{ insights }} — formatted insights from previous iterations
@@ -35,8 +38,9 @@ class LLMResearcher(Researcher):
         num_tasks: int = 3,
         artifact: str | None = None,
     ):
+        # Don't call super().__init__ with runner — we manage llm directly
+        super().__init__(prompt_template=prompt_template, num_tasks=num_tasks)
         self.llm = llm
-        self.prompt_template = prompt_template
         self.num_tasks = num_tasks
         self.artifact = artifact  # name of artifact to modify, or None
 
@@ -115,20 +119,6 @@ class LLMResearcher(Researcher):
             tasks.append(Hypothesis(id=task_id, spec=item, metadata=metadata))
 
         return tasks
-
-    def _read_inputs(self, workspace: Workspace) -> str:
-        """Read all files from inputs/ directory as context."""
-        inputs_dir = workspace.inputs_dir()
-        parts = []
-        for f in sorted(inputs_dir.rglob("*")):
-            if f.is_file():
-                try:
-                    content = f.read_text()
-                    rel_path = f.relative_to(inputs_dir)
-                    parts.append(f"--- {rel_path} ---\n{content}")
-                except (UnicodeDecodeError, OSError):
-                    continue
-        return "\n\n".join(parts) if parts else "No input files."
 
     def _extract_code(self, response: str) -> str:
         """Extract code from LLM response, handling markdown fences."""

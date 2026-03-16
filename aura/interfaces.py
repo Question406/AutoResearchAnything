@@ -10,7 +10,14 @@ if TYPE_CHECKING:
     from aura.workspace import Workspace
 
 
-class Researcher(ABC):
+class Runner(ABC):
+    """AURA-agnostic execution backend.
+
+    Receives a prompt template + plain context dict.
+    Handles prompt rendering and execution.
+    Returns a result dict.
+    """
+
     def setup(self, workspace: Workspace) -> None:
         pass
 
@@ -18,7 +25,90 @@ class Researcher(ABC):
         pass
 
     @abstractmethod
-    def hypothesize(self, insights: list[Insight], workspace: Workspace) -> list[Hypothesis]: ...
+    def run(self, prompt_template: str, context: dict) -> dict:
+        """Render and execute a prompt.
+
+        Args:
+            prompt_template: Jinja2 template string.
+            context: Plain strings/ints/dicts — no AURA types.
+
+        Returns:
+            Dict with at least "content" (str). Optional:
+            - "structured" (dict|list) — pre-parsed, bypasses extract_json
+            - "steps" (list[dict]) — intermediate steps
+            - "files" (dict[str,str]) — files created/modified
+            - "metadata" (dict) — token usage, timing
+        """
+        ...
+
+
+class Researcher(ABC):
+    def __init__(self, runner: Runner | None = None, prompt_template: str | None = None, **config):
+        self.runner = None
+        self.prompt_template = prompt_template
+        self.config = config
+        if runner is not None:
+            from aura.components.runners import as_runner
+
+            self.runner = as_runner(runner)
+
+    def setup(self, workspace: Workspace) -> None:
+        runner = getattr(self, "runner", None)
+        if runner:
+            runner.setup(workspace)
+
+    def teardown(self) -> None:
+        runner = getattr(self, "runner", None)
+        if runner:
+            runner.teardown()
+
+    def hypothesize(self, insights: list[Insight], workspace: Workspace) -> list[Hypothesis]:
+        if getattr(self, "runner", None) is None:
+            raise NotImplementedError("Provide a runner or subclass and override hypothesize()")
+
+        from aura.types import Hypothesis
+        from aura.utils.parsing import extract_json
+
+        context = {
+            "insights": (
+                "\n".join(f"- {i.content}" for i in insights)
+                if insights
+                else "None yet (first iteration)"
+            ),
+            "inputs": self._read_inputs(workspace),
+            "iteration": workspace.current_iteration(),
+            "workspace_root": str(workspace.root),
+            "role": "researcher",
+            **self.config,
+        }
+
+        response = self.runner.run(self.prompt_template, context)
+
+        items = response.get("structured") or extract_json(response["content"])
+        if isinstance(items, dict):
+            items = [items]
+        return [
+            Hypothesis(
+                id=item.pop("id", str(uuid.uuid4())[:8]),
+                spec=item,
+                metadata=item.pop("metadata", {}),
+            )
+            for item in items
+        ]
+
+    def _read_inputs(self, workspace: Workspace) -> str:
+        """Read all files from inputs/ directory as context."""
+        inputs_dir = workspace.inputs_dir()
+        parts = []
+        for f in sorted(inputs_dir.rglob("*")):
+            if f.is_file():
+                try:
+                    content = f.read_text()
+                    rel_path = f.relative_to(inputs_dir)
+                    parts.append(f"--- {rel_path} ---\n{content}")
+                except (UnicodeDecodeError, OSError):
+                    continue
+        return "\n\n".join(parts) if parts else "No input files."
 
 
 class Experimenter(ABC):
@@ -145,30 +235,138 @@ class Collector(ABC):
 
 
 class Evaluator(ABC):
+    def __init__(self, runner: Runner | None = None, prompt_template: str | None = None, **config):
+        self.runner = None
+        self.prompt_template = prompt_template or (
+            "Evaluate this result.\n\n"
+            "Task: {{ task }}\n\n"
+            "Output: {{ output }}\n\n"
+            'Rate on 0.0-1.0. Respond in JSON: {"score": float, "passed": bool, "reason": string}'
+        )
+        self.config = config
+        if runner is not None:
+            from aura.components.runners import as_runner
+
+            self.runner = as_runner(runner)
+
     def setup(self, workspace: Workspace) -> None:
-        pass
+        runner = getattr(self, "runner", None)
+        if runner:
+            runner.setup(workspace)
 
     def teardown(self) -> None:
-        pass
+        runner = getattr(self, "runner", None)
+        if runner:
+            runner.teardown()
 
-    @abstractmethod
     def evaluate(
         self, task: Hypothesis, experiment: Experiment, workspace: Workspace
-    ) -> Evaluation: ...
+    ) -> Evaluation:
+        if getattr(self, "runner", None) is None:
+            raise NotImplementedError("Provide a runner or subclass and override evaluate()")
+
+        from aura.types import Evaluation
+        from aura.utils.parsing import extract_json
+
+        if experiment.status == "failed":
+            return Evaluation(
+                task_id=task.id,
+                score=0.0,
+                passed=False,
+                details={"reason": "execution_failed", "error": experiment.error},
+            )
+
+        context = {
+            "task": task.spec,
+            "output": experiment.summary,
+            "trajectory": [s.data for s in experiment.steps],
+            "workspace_root": str(workspace.root),
+            "role": "evaluator",
+            **self.config,
+        }
+
+        response = self.runner.run(self.prompt_template, context)
+        result = response.get("structured") or extract_json(response["content"])
+        return Evaluation(
+            task_id=task.id,
+            score=float(result.get("score", 0.0)),
+            passed=bool(result.get("passed", False)),
+            details={"reason": result.get("reason", "")},
+        )
 
 
 class Reviewer(ABC):
+    def __init__(self, runner: Runner | None = None, prompt_template: str | None = None, **config):
+        self.runner = None
+        self.prompt_template = prompt_template or (
+            "Analyze these experiment results:\n\n"
+            "{{ results }}\n\n"
+            "Extract 2-3 insights. What worked? What failed? What to try next?\n\n"
+            'Respond as JSON list: [{"finding": string, "recommendation": string}]'
+        )
+        self.config = config
+        if runner is not None:
+            from aura.components.runners import as_runner
+
+            self.runner = as_runner(runner)
+
     def setup(self, workspace: Workspace) -> None:
-        pass
+        runner = getattr(self, "runner", None)
+        if runner:
+            runner.setup(workspace)
 
     def teardown(self) -> None:
-        pass
+        runner = getattr(self, "runner", None)
+        if runner:
+            runner.teardown()
 
-    @abstractmethod
     def review(
         self,
         tasks: list[Hypothesis],
         experiments: list[Experiment],
         evaluations: list[Evaluation],
         workspace: Workspace,
-    ) -> list[Insight]: ...
+    ) -> list[Insight]:
+        if getattr(self, "runner", None) is None:
+            raise NotImplementedError("Provide a runner or subclass and override review()")
+
+        from aura.types import Insight
+        from aura.utils.parsing import extract_json
+
+        eval_by_id = {e.task_id: e for e in evaluations}
+        exp_by_id = {e.task_id: e for e in experiments}
+
+        lines = []
+        for task in tasks:
+            ev = eval_by_id.get(task.id)
+            exp = exp_by_id.get(task.id)
+            output_summary = exp.summary if exp and exp.summary else "N/A"
+            if isinstance(output_summary, dict):
+                output_summary = ", ".join(f"{k}={v}" for k, v in output_summary.items())
+            lines.append(
+                f"- Task {task.id} (spec: {task.spec}): "
+                f"output={output_summary}, "
+                f"score={ev.score if ev else 'N/A'}, "
+                f"passed={ev.passed if ev else 'N/A'}"
+            )
+
+        context = {
+            "results": "\n".join(lines) if lines else "No results.",
+            "iteration": workspace.current_iteration(),
+            "workspace_root": str(workspace.root),
+            "role": "reviewer",
+            **self.config,
+        }
+
+        response = self.runner.run(self.prompt_template, context)
+        items = response.get("structured") or extract_json(response["content"])
+        if isinstance(items, dict):
+            items = [items]
+        return [
+            Insight(
+                id=str(uuid.uuid4())[:8],
+                source_iteration=workspace.current_iteration(),
+                content=item,
+            )
+            for item in items
+        ]

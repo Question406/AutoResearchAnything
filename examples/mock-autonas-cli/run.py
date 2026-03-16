@@ -1,15 +1,19 @@
 """Autoresearch example designed for `aura run`.
 
 Usage:
-    aura validate examples/autoresearch-cli/run.py
-    aura run examples/autoresearch-cli/run.py
+    aura validate examples/mock-autonas-cli/run.py
+    aura run examples/mock-autonas-cli/run.py --run-dir ./runs/my_experiment
+
+This example uses the runner-based API where stage ABCs (Researcher, Evaluator,
+Reviewer) accept a `runner=` parameter directly, eliminating the need for
+LLMResearcher / LLMJudgeEvaluator / LLMReviewer wrapper classes.
 """
 import json
 from pathlib import Path
 
 from aura import (
     Pipeline, Workspace, setup_logging,
-    LLMResearcher, ScriptExperimenter, MetricEvaluator, LLMReviewer,
+    Researcher, ScriptExperimenter, MetricEvaluator, Reviewer,
     anthropic_llm,
 )
 
@@ -33,8 +37,9 @@ def main():
     }, indent=2))
 
     pipeline = Pipeline(
-        researcher=LLMResearcher(
-            llm=llm,
+        # Researcher with runner= accepts an LLMCallable directly (auto-wrapped into LLMRunner)
+        researcher=Researcher(
+            runner=llm,
             prompt_template=(
                 "You are a research experiment proposer.\n\n"
                 "Research goal: {{ inputs }}\n\n"
@@ -49,7 +54,8 @@ def main():
             command_template=f"python {MOCK_TRAIN} --lr {{lr}} --epochs {{epochs}} --batch-size {{batch_size}}",
         ),
         evaluator=MetricEvaluator(metric="accuracy", baseline=0.5),
-        reviewer=LLMReviewer(llm=llm),
+        # Reviewer with runner= uses the default prompt template
+        reviewer=Reviewer(runner=llm),
         workspace=workspace,
         max_iterations=3,
     )

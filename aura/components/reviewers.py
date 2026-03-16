@@ -11,6 +11,9 @@ from aura.utils.parsing import extract_json, render_prompt
 class LLMReviewer(Reviewer):
     """Extract insights by asking an LLM to analyze results.
 
+    .. deprecated::
+        Use ``Reviewer(runner=llm, prompt_template=...)`` instead.
+
     The prompt_template receives:
 
     - ``{{ results }}`` — formatted summary of task results
@@ -20,13 +23,8 @@ class LLMReviewer(Reviewer):
     """
 
     def __init__(self, llm: LLMCallable, prompt_template: str | None = None):
+        super().__init__(prompt_template=prompt_template)
         self.llm = llm
-        self.prompt_template = prompt_template or (
-            "Analyze these experiment results:\n\n"
-            "{{ results }}\n\n"
-            "Extract 2-3 insights. What worked? What failed? What to try next?\n\n"
-            'Respond as JSON list: [{"finding": string, "recommendation": string}]'
-        )
 
     def review(self, tasks, experiments, evaluations, workspace) -> list[Insight]:
         eval_by_id = {e.task_id: e for e in evaluations}

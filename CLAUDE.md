@@ -31,16 +31,28 @@ AURA (Auto Research Anything) is a domain-agnostic framework for self-improving 
 ### Three-Layer Design
 
 ```
-User Code (custom Runner subclass or script with globals/main pattern)
+User Code (custom CliRunner subclass or script with globals/main pattern)
     ↓
 Built-in Components (LLMResearcher, ScriptExperimenter, MetricEvaluator, LLMReviewer)
     ↓
-Core Framework (Pipeline, Workspace, Interfaces, Types)
+Core Framework (Pipeline, Workspace, Interfaces, Types, Runner)
 ```
 
 ### Core Loop (Pipeline.run)
 
 `Pipeline` orchestrates the four-stage iteration: **Hypothesize → Experiment → Evaluate → Review**. Each stage delegates to a pluggable component implementing one of four ABCs defined in `aura/interfaces.py`: `Researcher`, `Experimenter`, `Evaluator`, `Reviewer`. All cross-component data flows through Pydantic models in `aura/types.py` (`Hypothesis`, `Experiment`, `Evaluation`, `Insight`).
+
+### Runner Abstraction
+
+`Runner` ABC (`aura/interfaces.py`) is an AURA-agnostic execution backend. Runners receive a Jinja2 prompt template and a plain context dict, handle rendering and execution, and return a result dict. Stage classes (Researcher, Evaluator, Reviewer) handle conversion between AURA types and plain dicts.
+
+Built-in runners in `aura/components/runners.py`:
+- `LLMRunner(llm)` — wraps an `LLMCallable` for single API call
+- `CommandRunner(command, timeout)` — shells out to a CLI agent (claude, codex, aider, etc.)
+- `FunctionRunner(fn)` — wraps a Python callable `(prompt, context) -> dict|str`
+- `as_runner(llm_or_runner)` — normalizes `LLMCallable | Runner` into a `Runner`
+
+Stage ABCs accept an optional `runner=` parameter. When provided, the stage uses the runner for its default implementation. When not provided, subclasses must override the core method.
 
 ### Persistence (Workspace)
 
@@ -54,12 +66,12 @@ Core Framework (Pipeline, Workspace, Interfaces, Types)
 
 `aura/cli.py` uses AST analysis to detect three user file patterns:
 - **"main"** — file defines `def main()`
-- **"runner"** — file defines a `Runner` subclass
+- **"runner"** — file defines a `CliRunner` subclass (detected by AST base name `Runner`)
 - **"globals"** — file has module-level `workspace` and `pipeline` variables (executed via `runpy.run_path`)
 
 ### LLM Interface
 
-`LLMCallable = Callable[[str], str]` — a single callable. Three factory functions in `aura/components/llm.py`: `anthropic_llm()`, `openai_llm()`, `command_llm()`. Components that use LLMs accept this callable, keeping them provider-agnostic.
+`LLMCallable = Callable[[str], str]` — a single callable. Three factory functions in `aura/components/llm.py`: `anthropic_llm()`, `openai_llm()`, `command_llm()`. Any `LLMCallable` is auto-wrapped into an `LLMRunner` via `as_runner()` when passed to a stage.
 
 ### Decorators vs ABCs
 

@@ -2,8 +2,10 @@ from aura.artifacts import Artifact, DirectoryArtifact, FileArtifact
 from aura.components import (
     AllTrialsAggregator,
     BestTrialAggregator,
+    CommandRunner,
     CondaEnvironment,
     DockerEnvironment,
+    FunctionRunner,
     UvEnvironment,
     FunctionExperimenter,
     FunctionExecutor,
@@ -14,6 +16,7 @@ from aura.components import (
     LLMJudgeEvaluator,
     LLMResearcher,
     LLMReviewer,
+    LLMRunner,
     LastTrialAggregator,
     LogParserCollector,
     MetricEvaluator,
@@ -24,6 +27,7 @@ from aura.components import (
     SlurmExecutor,
     StdoutCollector,
     VenvEnvironment,
+    as_runner,
 )
 from aura.components.llm import anthropic_llm, command_llm, openai_llm
 from aura.decorators import as_evaluator, as_experimenter, as_researcher, as_reviewer
@@ -36,10 +40,11 @@ from aura.interfaces import (
     Experimenter,
     Researcher,
     Reviewer,
+    Runner,
     SingleTrialExperimenter,
 )
 from aura.pipeline import Pipeline
-from aura.runner import Runner
+from aura.runner import CliRunner
 from aura.types import (
     Evaluation,
     Experiment,
@@ -65,6 +70,7 @@ __all__ = [
     "Insight",
     "JsonValue",
     # Interfaces
+    "Runner",
     "Researcher",
     "Experimenter",
     "SingleTrialExperimenter",
@@ -85,7 +91,7 @@ __all__ = [
     "DirectoryArtifact",
     "Workspace",
     "Pipeline",
-    "Runner",
+    "CliRunner",
     # Utilities
     "extract_json",
     "render_prompt",
@@ -95,6 +101,11 @@ __all__ = [
     "anthropic_llm",
     "openai_llm",
     "command_llm",
+    # Runners
+    "LLMRunner",
+    "CommandRunner",
+    "FunctionRunner",
+    "as_runner",
     # Built-in components
     "LLMResearcher",
     "ScriptExperimenter",

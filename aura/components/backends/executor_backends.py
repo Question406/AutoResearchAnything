@@ -182,14 +182,32 @@ class FunctionExecutor(Executor):
 
 
 class LLMExecutor(Executor):
-    """Send a hypothesis to an LLM and return its response."""
+    """Send a hypothesis to an LLM or Runner and return its response."""
 
-    def __init__(self, llm: Callable[[str], str], prompt_template: str | None = None):
-        self.llm = llm
+    def __init__(self, llm: Callable[[str], str] | None = None, prompt_template: str | None = None, runner=None):
         self.prompt_template = prompt_template or "Complete this task:\n\n{{ query }}"
+        if runner is not None:
+            from aura.components.runners import as_runner
+
+            self._runner = as_runner(runner)
+            self.llm = None
+        elif llm is not None:
+            self._runner = None
+            self.llm = llm
+        else:
+            raise TypeError("Either 'llm' or 'runner' must be provided")
 
     def run(self, task: Hypothesis, context: dict, workspace: Workspace) -> dict:
         from aura.utils.parsing import render_prompt
+
+        if self._runner is not None:
+            ctx = {
+                **task.spec,
+                "workspace_root": str(workspace.root) if workspace else ".",
+                "constraints": workspace.constraints() if workspace else {},
+            }
+            response = self._runner.run(self.prompt_template, ctx)
+            return {"prompt": self.prompt_template, "response": response["content"]}
 
         constraints = workspace.constraints() if workspace else {}
         prompt = render_prompt(self.prompt_template, **task.spec, constraints=constraints)

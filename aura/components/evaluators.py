@@ -25,6 +25,8 @@ class MetricEvaluator(Evaluator):
         higher_is_better: bool = True,
         max_improvement: float = 0.5,
     ):
+        # Don't call super().__init__ with runner — MetricEvaluator doesn't use one
+        super().__init__()
         self.metric = metric
         self.baseline = baseline
         self.higher_is_better = higher_is_better
@@ -74,6 +76,9 @@ class MetricEvaluator(Evaluator):
 class LLMJudgeEvaluator(Evaluator):
     """Evaluate by asking an LLM to judge the experiment.
 
+    .. deprecated::
+        Use ``Evaluator(runner=llm, prompt_template=...)`` instead.
+
     The prompt_template receives:
 
     - ``{{ task }}`` — task spec as formatted string
@@ -84,13 +89,8 @@ class LLMJudgeEvaluator(Evaluator):
     """
 
     def __init__(self, llm: LLMCallable, prompt_template: str | None = None):
+        super().__init__(prompt_template=prompt_template)
         self.llm = llm
-        self.prompt_template = prompt_template or (
-            "Evaluate this result.\n\n"
-            "Task: {{ task }}\n\n"
-            "Output: {{ output }}\n\n"
-            'Rate on 0.0-1.0. Respond in JSON: {"score": float, "passed": bool, "reason": string}'
-        )
 
     def evaluate(
         self, task: Hypothesis, experiment: Experiment, workspace: Workspace

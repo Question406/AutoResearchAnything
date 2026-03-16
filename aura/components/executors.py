@@ -98,18 +98,39 @@ class FunctionExperimenter(SingleTrialExperimenter):
 
 
 class LLMExperimenter(SingleTrialExperimenter):
-    """Execute tasks by sending them to an LLM.
+    """Execute tasks by sending them to a Runner or LLM.
 
     The prompt_template uses {{ field }} placeholders filled from task.spec.
+    Accepts either a Runner instance or an LLMCallable.
     """
 
-    def __init__(self, llm: LLMCallable, prompt_template: str | None = None):
+    def __init__(self, llm: LLMCallable | None = None, prompt_template: str | None = None, runner=None):
         super().__init__(aggregator=LastTrialAggregator())
-        self.llm = llm
         self.prompt_template = prompt_template or "Complete this task:\n\n{{ query }}"
+        if runner is not None:
+            from aura.components.runners import as_runner
+
+            self._runner = as_runner(runner)
+            self.llm = None
+        elif llm is not None:
+            self._runner = None
+            self.llm = llm
+        else:
+            raise TypeError("Either 'llm' or 'runner' must be provided")
 
     def execute(self, task: Hypothesis, context: dict, workspace: Workspace) -> Any:
         from aura.utils.parsing import render_prompt
+
+        if self._runner is not None:
+            ctx = {
+                **task.spec,
+                "role": "experimenter",
+                "workspace_root": str(workspace.root) if workspace else ".",
+                "trial_dir": str(context.get("trial_dir", ".")),
+                "constraints": workspace.constraints() if workspace else {},
+            }
+            response = self._runner.run(self.prompt_template, ctx)
+            return {"prompt": self.prompt_template, "response": response["content"]}
 
         constraints = workspace.constraints() if workspace else {}
         prompt = render_prompt(self.prompt_template, **task.spec, constraints=constraints)

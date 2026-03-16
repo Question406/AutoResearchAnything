@@ -16,6 +16,7 @@ from aura.components.executors import FunctionExperimenter, LLMExperimenter, Scr
 from aura.components.llm import LLMCallable
 from aura.components.researchers import LLMResearcher
 from aura.components.reviewers import LLMReviewer
+from aura.components.runners import CommandRunner, FunctionRunner, LLMRunner, as_runner
 
 __all__ = [
     "LLMCallable",
@@ -26,6 +27,11 @@ __all__ = [
     "MetricEvaluator",
     "LLMJudgeEvaluator",
     "LLMReviewer",
+    # Runners
+    "LLMRunner",
+    "CommandRunner",
+    "FunctionRunner",
+    "as_runner",
     # Aggregators
     "BestTrialAggregator",
     "LastTrialAggregator",

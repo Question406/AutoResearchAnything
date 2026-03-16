@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from aura.workspace import Workspace
 
 
-class Runner(ABC):
+class CliRunner(ABC):
     @abstractmethod
     def setup_inputs(self, workspace: Workspace) -> None: ...
 
@@ -28,3 +28,7 @@ class Runner(ABC):
         pipeline = self.build_pipeline(workspace)
         pipeline.run()
         return workspace
+
+
+# Backward-compat alias: user files that do `from aura.runner import Runner` still work
+Runner = CliRunner

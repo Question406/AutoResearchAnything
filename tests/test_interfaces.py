@@ -4,9 +4,10 @@ from aura.interfaces import Evaluator, Experimenter, Researcher, Reviewer
 from aura.types import Evaluation, Experiment, Hypothesis, Insight
 
 
-def test_cannot_instantiate_abstract_researcher():
-    with pytest.raises(TypeError):
-        Researcher()
+def test_researcher_without_runner_raises_on_call():
+    r = Researcher()
+    with pytest.raises(NotImplementedError, match="Provide a runner"):
+        r.hypothesize([], None)
 
 
 def test_cannot_instantiate_abstract_experimenter():
@@ -14,14 +15,20 @@ def test_cannot_instantiate_abstract_experimenter():
         Experimenter()
 
 
-def test_cannot_instantiate_abstract_evaluator():
-    with pytest.raises(TypeError):
-        Evaluator()
+def test_evaluator_without_runner_raises_on_call():
+    e = Evaluator()
+    with pytest.raises(NotImplementedError, match="Provide a runner"):
+        e.evaluate(
+            Hypothesis(id="t1", spec={}),
+            Experiment(task_id="t1", status="completed", steps=[], output={}),
+            None,
+        )
 
 
-def test_cannot_instantiate_abstract_reviewer():
-    with pytest.raises(TypeError):
-        Reviewer()
+def test_reviewer_without_runner_raises_on_call():
+    r = Reviewer()
+    with pytest.raises(NotImplementedError, match="Provide a runner"):
+        r.review([], [], [], None)
 
 
 def test_concrete_researcher():
