@@ -12,10 +12,11 @@ class LLMReviewer(Reviewer):
     """Extract insights by asking an LLM to analyze results.
 
     The prompt_template receives:
-    - {{ results }} — formatted summary of task results
-    - {{ iteration }} — current iteration number
 
-    LLM must return JSON list: [{"finding": string, "recommendation": string}]
+    - ``{{ results }}`` — formatted summary of task results
+    - ``{{ iteration }}`` — current iteration number
+
+    LLM must return JSON list: ``[{"finding": string, "recommendation": string}]``
     """
 
     def __init__(self, llm: LLMCallable, prompt_template: str | None = None):
@@ -27,15 +28,15 @@ class LLMReviewer(Reviewer):
             'Respond as JSON list: [{"finding": string, "recommendation": string}]'
         )
 
-    def review(self, tasks, trajectories, evaluations, workspace) -> list[Insight]:
+    def review(self, tasks, experiments, evaluations, workspace) -> list[Insight]:
         eval_by_id = {e.task_id: e for e in evaluations}
-        traj_by_id = {t.task_id: t for t in trajectories}
+        exp_by_id = {e.task_id: e for e in experiments}
 
         lines = []
         for task in tasks:
             ev = eval_by_id.get(task.id)
-            traj = traj_by_id.get(task.id)
-            output_summary = traj.output if traj and traj.output else "N/A"
+            exp = exp_by_id.get(task.id)
+            output_summary = exp.summary if exp and exp.summary else "N/A"
             if isinstance(output_summary, dict):
                 output_summary = ", ".join(f"{k}={v}" for k, v in output_summary.items())
             lines.append(

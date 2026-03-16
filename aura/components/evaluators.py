@@ -10,10 +10,11 @@ from aura.workspace import Workspace
 class MetricEvaluator(Evaluator):
     """Evaluate by comparing a numeric metric against a baseline.
 
-    Extracts `metric` from trajectory.output and scores based on improvement
+    Extracts ``metric`` from ``experiment.summary`` and scores based on improvement
     over baseline. Score is normalized to 0-1.
 
-    Example:
+    Example::
+
         MetricEvaluator(metric="accuracy", baseline=0.5)
     """
 
@@ -30,17 +31,19 @@ class MetricEvaluator(Evaluator):
         self.max_improvement = max_improvement
 
     def evaluate(
-        self, task: Hypothesis, trajectory: Experiment, workspace: Workspace
+        self, task: Hypothesis, experiment: Experiment, workspace: Workspace
     ) -> Evaluation:
-        if trajectory.status == "failed":
+        if experiment.status == "failed":
             return Evaluation(
                 task_id=task.id,
                 score=0.0,
                 passed=False,
-                details={"reason": "execution_failed", "error": trajectory.error},
+                details={"reason": "execution_failed", "error": experiment.error},
             )
 
-        output = trajectory.output if isinstance(trajectory.output, dict) else {}
+        # Read from summary (for multi-trial) with fallback to output (legacy)
+        summary = experiment.summary
+        output = summary if isinstance(summary, dict) else {}
         value = output.get(self.metric, self.baseline)
 
         if self.higher_is_better:
@@ -69,14 +72,15 @@ class MetricEvaluator(Evaluator):
 
 
 class LLMJudgeEvaluator(Evaluator):
-    """Evaluate by asking an LLM to judge the trajectory.
+    """Evaluate by asking an LLM to judge the experiment.
 
     The prompt_template receives:
-    - {{ task }} — task spec as formatted string
-    - {{ output }} — trajectory output
-    - {{ trajectory }} — full trajectory steps
 
-    LLM must return JSON: {"score": float, "passed": bool, "reason": string}
+    - ``{{ task }}`` — task spec as formatted string
+    - ``{{ output }}`` — experiment summary/output
+    - ``{{ trajectory }}`` — full experiment steps (legacy name kept for templates)
+
+    LLM must return JSON: ``{"score": float, "passed": bool, "reason": string}``
     """
 
     def __init__(self, llm: LLMCallable, prompt_template: str | None = None):
@@ -89,21 +93,22 @@ class LLMJudgeEvaluator(Evaluator):
         )
 
     def evaluate(
-        self, task: Hypothesis, trajectory: Experiment, workspace: Workspace
+        self, task: Hypothesis, experiment: Experiment, workspace: Workspace
     ) -> Evaluation:
-        if trajectory.status == "failed":
+        if experiment.status == "failed":
             return Evaluation(
                 task_id=task.id,
                 score=0.0,
                 passed=False,
-                details={"reason": "execution_failed", "error": trajectory.error},
+                details={"reason": "execution_failed", "error": experiment.error},
             )
 
         prompt = render_prompt(
             self.prompt_template,
             task=task.spec,
-            output=trajectory.output,
-            trajectory=[s.data for s in trajectory.steps],
+            output=experiment.summary,
+            # "trajectory" kept as template var name for backward compat with user templates
+            trajectory=[s.data for s in experiment.steps],
         )
 
         response = self.llm(prompt)

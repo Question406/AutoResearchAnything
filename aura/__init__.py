@@ -1,49 +1,101 @@
 from aura.artifacts import Artifact, DirectoryArtifact, FileArtifact
 from aura.components import (
+    AllTrialsAggregator,
+    BestTrialAggregator,
+    CondaEnvironment,
+    DockerEnvironment,
+    UvEnvironment,
     FunctionExperimenter,
+    FunctionExecutor,
+    JSONFileCollector,
     LLMCallable,
     LLMExperimenter,
+    LLMExecutor,
     LLMJudgeEvaluator,
     LLMResearcher,
     LLMReviewer,
+    LastTrialAggregator,
+    LogParserCollector,
     MetricEvaluator,
     ScriptExperimenter,
+    BindfsExecutor,
+    BwrapExecutor,
+    ScriptExecutor,
+    SlurmExecutor,
+    StdoutCollector,
+    VenvEnvironment,
 )
 from aura.components.llm import anthropic_llm, command_llm, openai_llm
 from aura.decorators import as_evaluator, as_experimenter, as_researcher, as_reviewer
-from aura.interfaces import Evaluator, Experimenter, Researcher, Reviewer
+from aura.components.aggregators import Aggregator
+from aura.interfaces import (
+    Collector,
+    Environment,
+    Evaluator,
+    Executor,
+    Experimenter,
+    Researcher,
+    Reviewer,
+    SingleTrialExperimenter,
+)
 from aura.pipeline import Pipeline
 from aura.runner import Runner
-from aura.types import Evaluation, Experiment, ExperimentStep, Hypothesis, Insight, JsonValue
+from aura.types import (
+    Evaluation,
+    Experiment,
+    ExperimentStep,
+    Hypothesis,
+    Insight,
+    JsonValue,
+    Trial,
+    TrialStep,
+)
 from aura.utils.logging import setup_logging
 from aura.utils.parsing import extract_json, render_prompt
 from aura.workspace import Workspace
 
 __all__ = [
+    # Types
     "Hypothesis",
-    "ExperimentStep",
+    "TrialStep",
+    "ExperimentStep",  # backward-compat alias for TrialStep
+    "Trial",
     "Experiment",
     "Evaluation",
     "Insight",
     "JsonValue",
+    # Interfaces
     "Researcher",
     "Experimenter",
+    "SingleTrialExperimenter",
     "Evaluator",
     "Reviewer",
+    "Environment",
+    "Executor",
+    "Collector",
+    "Aggregator",
+    # Decorators
     "as_researcher",
     "as_experimenter",
     "as_evaluator",
     "as_reviewer",
+    # Core
     "Artifact",
     "FileArtifact",
     "DirectoryArtifact",
     "Workspace",
     "Pipeline",
     "Runner",
+    # Utilities
     "extract_json",
     "render_prompt",
     "setup_logging",
+    # LLM
     "LLMCallable",
+    "anthropic_llm",
+    "openai_llm",
+    "command_llm",
+    # Built-in components
     "LLMResearcher",
     "ScriptExperimenter",
     "FunctionExperimenter",
@@ -51,7 +103,24 @@ __all__ = [
     "MetricEvaluator",
     "LLMJudgeEvaluator",
     "LLMReviewer",
-    "anthropic_llm",
-    "openai_llm",
-    "command_llm",
+    # Aggregators
+    "BestTrialAggregator",
+    "LastTrialAggregator",
+    "AllTrialsAggregator",
+    # Environments
+    "CondaEnvironment",
+    "VenvEnvironment",
+    "UvEnvironment",
+    "DockerEnvironment",
+    # Executor backends
+    "ScriptExecutor",
+    "BwrapExecutor",
+    "BindfsExecutor",
+    "FunctionExecutor",
+    "LLMExecutor",
+    "SlurmExecutor",
+    # Collector backends
+    "StdoutCollector",
+    "JSONFileCollector",
+    "LogParserCollector",
 ]

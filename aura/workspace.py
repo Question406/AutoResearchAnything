@@ -69,10 +69,14 @@ class Workspace:
         path = self.iteration_dir(it) / "tasks" / f"{task.id}.json"
         path.write_text(task.model_dump_json(indent=2))
 
-    def save_trajectory(self, trajectory: Experiment, iteration: int | None = None) -> None:
+    def save_experiment(self, experiment: Experiment, iteration: int | None = None) -> None:
         it = iteration if iteration is not None else self._current_iteration
-        path = self.iteration_dir(it) / "trajectories" / f"{trajectory.task_id}.json"
-        path.write_text(trajectory.model_dump_json(indent=2))
+        path = self.iteration_dir(it) / "trajectories" / f"{experiment.task_id}.json"
+        path.write_text(experiment.model_dump_json(indent=2))
+
+    # Backward-compat alias
+    def save_trajectory(self, trajectory: Experiment, iteration: int | None = None) -> None:
+        self.save_experiment(trajectory, iteration)
 
     def save_evaluation(self, result: Evaluation, iteration: int | None = None) -> None:
         it = iteration if iteration is not None else self._current_iteration
@@ -92,15 +96,23 @@ class Workspace:
             Hypothesis.model_validate_json(f.read_text()) for f in sorted(tasks_dir.glob("*.json"))
         ]
 
-    def load_trajectory(self, task_id: str, iteration: int) -> Experiment:
+    def load_experiment(self, task_id: str, iteration: int) -> Experiment:
         path = self.iteration_dir(iteration) / "trajectories" / f"{task_id}.json"
         return Experiment.model_validate_json(path.read_text())
 
-    def load_trajectories(self, iteration: int) -> list[Experiment]:
+    # Backward-compat alias
+    def load_trajectory(self, task_id: str, iteration: int) -> Experiment:
+        return self.load_experiment(task_id, iteration)
+
+    def load_experiments(self, iteration: int) -> list[Experiment]:
         traj_dir = self.iteration_dir(iteration) / "trajectories"
         return [
             Experiment.model_validate_json(f.read_text()) for f in sorted(traj_dir.glob("*.json"))
         ]
+
+    # Backward-compat alias
+    def load_trajectories(self, iteration: int) -> list[Experiment]:
+        return self.load_experiments(iteration)
 
     def load_evaluation(self, task_id: str, iteration: int) -> Evaluation:
         path = self.iteration_dir(iteration) / "evaluations" / f"{task_id}.json"
@@ -120,9 +132,20 @@ class Workspace:
 
     # --- State queries ---
 
+    def trial_dir(self, task_id: str, iteration: int | None = None) -> Path:
+        """Return (and create) a per-trial working directory for filesystem isolation."""
+        it = iteration if iteration is not None else self._current_iteration
+        d = self.iteration_dir(it) / "trials" / task_id
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
     def has_trajectory(self, task_id: str, iteration: int | None = None) -> bool:
         it = iteration if iteration is not None else self._current_iteration
         return (self.iteration_dir(it) / "trajectories" / f"{task_id}.json").exists()
+
+    # Alias
+    def has_experiment(self, task_id: str, iteration: int | None = None) -> bool:
+        return self.has_trajectory(task_id, iteration)
 
     def has_evaluation(self, task_id: str, iteration: int | None = None) -> bool:
         it = iteration if iteration is not None else self._current_iteration
@@ -157,11 +180,11 @@ class Workspace:
         for it in range(1, iterations_completed + 1):
             tasks = self.load_tasks(it)
             evals = self.load_evaluations(it)
-            trajectories = self.load_trajectories(it)
+            experiments = self.load_experiments(it)
 
             scores = [e.score for e in evals]
             passed = sum(1 for e in evals if e.passed)
-            failed_exec = sum(1 for t in trajectories if t.status == "failed")
+            failed_exec = sum(1 for t in experiments if t.status == "failed")
 
             avg_score = sum(scores) / len(scores) if scores else 0.0
             max_score = max(scores) if scores else 0.0

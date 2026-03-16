@@ -6,96 +6,59 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from aura.components.aggregators import LastTrialAggregator
+from aura.components.backends.collector_backends import StdoutCollector
+from aura.components.backends.executor_backends import ScriptExecutor
 from aura.components.llm import LLMCallable
-from aura.interfaces import Experimenter
-from aura.types import Experiment, ExperimentStep, Hypothesis
+from aura.interfaces import SingleTrialExperimenter
+from aura.types import Trial, TrialStep
 from aura.workspace import Workspace
+from aura.types import Hypothesis
 
 
-class ScriptExperimenter(Experimenter):
+class ScriptExperimenter(SingleTrialExperimenter):
     """Execute tasks by running a shell command.
 
     The command_template uses {field} placeholders that are filled from task.spec.
-    Stdout is parsed as JSON for the trajectory output.
+    Stdout is parsed as JSON for the experiment output.
 
-    Example:
+    Example::
+
         ScriptExperimenter("python train.py --lr {lr} --epochs {epochs}")
     """
 
     def __init__(self, command_template: str, timeout: int = 300, parse_json: bool = True):
+        super().__init__(aggregator=LastTrialAggregator())
         self.command_template = command_template
         self.timeout = timeout
         self.parse_json = parse_json
 
-    def run_experiment(self, task: Hypothesis, workspace: Workspace) -> Experiment:
-        ts = datetime.now(UTC).isoformat()
+    def execute(self, task: Hypothesis, context: dict, workspace: Workspace) -> Any:
+        return ScriptExecutor(self.command_template, self.timeout).run(task, context, workspace)
 
-        # Build command from template + task spec
-        cmd = self.command_template.format(**task.spec)
-
-        # Constraints override constructor timeout
-        timeout = (
-            workspace.constraints().get("time_budget", self.timeout) if workspace else self.timeout
-        )
-
-        steps = [ExperimentStep(step=0, data={"type": "command", "cmd": cmd}, timestamp=ts)]
-
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
-
-        steps.append(
-            ExperimentStep(
-                step=1,
-                data={
-                    "type": "result",
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "returncode": result.returncode,
-                },
-                timestamp=datetime.now(UTC).isoformat(),
-            )
-        )
-
-        if result.returncode != 0:
-            return Experiment(
-                task_id=task.id, status="failed", steps=steps, output=None, error=result.stderr
-            )
-
-        output: Any = result.stdout.strip()
-        if self.parse_json:
-            try:
-                output = json.loads(output)
-            except json.JSONDecodeError:
-                pass
-
-        return Experiment(
-            task_id=task.id,
-            status="completed",
-            steps=steps,
-            output=output,
-            metadata={"spec": task.spec},
-        )
+    def collect(self, task: Hypothesis, raw: Any, context: dict, workspace: Workspace) -> Trial:
+        return StdoutCollector(self.parse_json).collect(task, raw, context, workspace)
 
 
-class FunctionExperimenter(Experimenter):
+class FunctionExperimenter(SingleTrialExperimenter):
     """Execute tasks by calling a Python function.
 
     The function receives task.spec as keyword arguments and returns the output.
     Respects constraints.time_budget as a timeout (seconds).
 
-    Example:
+    Example::
+
         FunctionExperimenter(lambda lr, epochs, **kw: train(lr=lr, epochs=epochs))
     """
 
     def __init__(self, fn: Callable[..., Any], timeout: int | None = None):
+        super().__init__(aggregator=LastTrialAggregator())
         self.fn = fn
         self.timeout = timeout
 
-    def run_experiment(self, task: Hypothesis, workspace: Workspace) -> Experiment:
+    def execute(self, task: Hypothesis, context: dict, workspace: Workspace) -> Any:
         from concurrent.futures import ThreadPoolExecutor
         from concurrent.futures import TimeoutError as FuturesTimeout
-
-        ts = datetime.now(UTC).isoformat()
-        steps = [ExperimentStep(step=0, data={"type": "call", "spec": task.spec}, timestamp=ts)]
 
         timeout = self.timeout
         if workspace:
@@ -105,68 +68,67 @@ class FunctionExperimenter(Experimenter):
             with ThreadPoolExecutor(max_workers=1) as pool:
                 future = pool.submit(self.fn, **task.spec)
                 try:
-                    result = future.result(timeout=timeout)
+                    return future.result(timeout=timeout)
                 except FuturesTimeout:
-                    return Experiment(
-                        task_id=task.id,
-                        status="failed",
-                        steps=steps,
-                        output=None,
-                        error=f"Timed out after {timeout}s",
-                    )
+                    raise RuntimeError(f"Timed out after {timeout}s")
         else:
-            result = self.fn(**task.spec)
+            return self.fn(**task.spec)
 
-        steps.append(
-            ExperimentStep(
-                step=1,
-                data={
-                    "type": "result",
-                    "output": result
-                    if isinstance(result, (dict, list, str, int, float, bool))
-                    else str(result),
-                },
-                timestamp=datetime.now(UTC).isoformat(),
-            )
-        )
-
+    def collect(self, task: Hypothesis, raw: Any, context: dict, workspace: Workspace) -> Trial:
+        ts = datetime.now(UTC).isoformat()
         output = (
-            result
-            if isinstance(result, (dict, list, str, int, float, bool, type(None)))
-            else str(result)
+            raw
+            if isinstance(raw, (dict, list, str, int, float, bool, type(None)))
+            else str(raw)
         )
-        return Experiment(task_id=task.id, status="completed", steps=steps, output=output)
+        return Trial(
+            id=f"{task.id}-0",
+            spec=task.spec,
+            status="completed",
+            steps=[
+                TrialStep(step=0, data={"type": "call", "spec": task.spec}, timestamp=ts),
+                TrialStep(
+                    step=1,
+                    data={"type": "result", "output": output},
+                    timestamp=datetime.now(UTC).isoformat(),
+                ),
+            ],
+            output=output,
+        )
 
 
-class LLMExperimenter(Experimenter):
+class LLMExperimenter(SingleTrialExperimenter):
     """Execute tasks by sending them to an LLM.
 
     The prompt_template uses {{ field }} placeholders filled from task.spec.
     """
 
     def __init__(self, llm: LLMCallable, prompt_template: str | None = None):
+        super().__init__(aggregator=LastTrialAggregator())
         self.llm = llm
         self.prompt_template = prompt_template or "Complete this task:\n\n{{ query }}"
 
-    def run_experiment(self, task: Hypothesis, workspace: Workspace) -> Experiment:
+    def execute(self, task: Hypothesis, context: dict, workspace: Workspace) -> Any:
         from aura.utils.parsing import render_prompt
-
-        ts = datetime.now(UTC).isoformat()
 
         constraints = workspace.constraints() if workspace else {}
         prompt = render_prompt(self.prompt_template, **task.spec, constraints=constraints)
-        steps = [ExperimentStep(step=0, data={"type": "prompt", "prompt": prompt}, timestamp=ts)]
-
         response = self.llm(prompt)
+        return {"prompt": prompt, "response": response}
 
-        steps.append(
-            ExperimentStep(
-                step=1,
-                data={"type": "response", "content": response},
-                timestamp=datetime.now(UTC).isoformat(),
-            )
-        )
-
-        return Experiment(
-            task_id=task.id, status="completed", steps=steps, output={"response": response}
+    def collect(self, task: Hypothesis, raw: Any, context: dict, workspace: Workspace) -> Trial:
+        ts = datetime.now(UTC).isoformat()
+        return Trial(
+            id=f"{task.id}-0",
+            spec=task.spec,
+            status="completed",
+            steps=[
+                TrialStep(step=0, data={"type": "prompt", "prompt": raw["prompt"]}, timestamp=ts),
+                TrialStep(
+                    step=1,
+                    data={"type": "response", "content": raw["response"]},
+                    timestamp=datetime.now(UTC).isoformat(),
+                ),
+            ],
+            output={"response": raw["response"]},
         )

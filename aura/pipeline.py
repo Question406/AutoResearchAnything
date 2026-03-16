@@ -92,11 +92,11 @@ class Pipeline:
             self.workspace.save_task(task, iteration=iteration)
         logger.info(f"Iteration {iteration}: generated {len(tasks)} tasks")
 
-        trajectories = self._execute_tasks(tasks, iteration)
-        failed = sum(1 for t in trajectories if t.status == "failed")
-        logger.info(f"Iteration {iteration}: executed {len(trajectories)} tasks ({failed} failed)")
+        experiments = self._execute_tasks(tasks, iteration)
+        failed = sum(1 for e in experiments if e.status == "failed")
+        logger.info(f"Iteration {iteration}: executed {len(experiments)} tasks ({failed} failed)")
 
-        evaluations = self._evaluate(tasks, trajectories, iteration)
+        evaluations = self._evaluate(tasks, experiments, iteration)
         if evaluations:
             avg_score = sum(e.score for e in evaluations) / len(evaluations)
             best_this = max(e.score for e in evaluations)
@@ -116,7 +116,7 @@ class Pipeline:
                         f"rolled back to iteration {self._best_iteration}"
                     )
 
-        new_insights = self.reviewer.review(tasks, trajectories, evaluations, self.workspace)
+        new_insights = self.reviewer.review(tasks, experiments, evaluations, self.workspace)
         self.workspace.save_insights(new_insights, iteration=iteration)
 
     def _snapshot_artifacts(self, iteration: int) -> None:
@@ -157,24 +157,24 @@ class Pipeline:
         if self.parallel_tasks <= 1:
             return [self._execute_single(task, iteration) for task in tasks]
 
-        trajectories = []
+        experiments = []
         with ThreadPoolExecutor(max_workers=self.parallel_tasks) as pool:
             futures = {pool.submit(self._execute_single, task, iteration): task for task in tasks}
             for future in as_completed(futures):
-                trajectories.append(future.result())
-        return trajectories
+                experiments.append(future.result())
+        return experiments
 
     def _execute_single(self, task: Hypothesis, iteration: int) -> Experiment:
         if self.workspace.has_trajectory(task.id, iteration=iteration):
-            logger.info(f"Task {task.id} already has trajectory, skipping")
-            return self.workspace.load_trajectory(task.id, iteration=iteration)
+            logger.info(f"Task {task.id} already has experiment, skipping")
+            return self.workspace.load_experiment(task.id, iteration=iteration)
 
         last_error = None
         for attempt in range(self.max_retries):
             try:
-                trajectory = self.experimenter.run_experiment(task, self.workspace)
-                self.workspace.save_trajectory(trajectory, iteration=iteration)
-                return trajectory
+                experiment = self.experimenter.run_experiment(task, self.workspace)
+                self.workspace.save_experiment(experiment, iteration=iteration)
+                return experiment
             except Exception as e:
                 last_error = e
                 logger.warning(f"Task {task.id} attempt {attempt + 1} failed: {e}")
@@ -188,24 +188,24 @@ class Pipeline:
             error=str(last_error),
             metadata={"retries": self.max_retries},
         )
-        self.workspace.save_trajectory(failed, iteration=iteration)
+        self.workspace.save_experiment(failed, iteration=iteration)
         return failed
 
     def _evaluate(
-        self, tasks: list[Hypothesis], trajectories: list[Experiment], iteration: int
+        self, tasks: list[Hypothesis], experiments: list[Experiment], iteration: int
     ) -> list[Evaluation]:
-        traj_by_id = {t.task_id: t for t in trajectories}
+        exp_by_id = {e.task_id: e for e in experiments}
         results = []
         for task in tasks:
-            traj = traj_by_id.get(task.id)
-            if traj is None:
+            exp = exp_by_id.get(task.id)
+            if exp is None:
                 continue
             if self.workspace.has_evaluation(task.id, iteration=iteration):
                 logger.info(f"Task {task.id} already has evaluation, skipping")
                 existing = self.workspace.load_evaluation(task.id, iteration=iteration)
                 results.append(existing)
                 continue
-            result = self.evaluator.evaluate(task, traj, self.workspace)
+            result = self.evaluator.evaluate(task, exp, self.workspace)
             self.workspace.save_evaluation(result, iteration=iteration)
             results.append(result)
         return results
